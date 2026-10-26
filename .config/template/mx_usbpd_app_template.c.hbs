@@ -1,0 +1,1161 @@
+{{assign "usbpdFilter" (JSONparse '{"cgroup": "STM32CubeMX2 Config", "csub": "USBPD"}')~}}
+{{assign 'usbpd_context' (@root.SWConfigurationAPI.getInstancesConfiguration @root.usbpdFilter)~}}
+{{assign 'usbpd_cxt' @root.usbpd_context.[0].settings.parameters~}}
+{{assign 'no_pd' false}}
+{{assign 'no_os' false}}
+/**
+  ******************************************************************************
+  * @file    mx_usbpd_app.c
+  * @brief   USBX applicative source file
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025-2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_usbpd_license.md file
+  * in the same directory as the generated code.
+  * If no mx_usbpd_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+{{#with @root.usbpd_cxt~}}
+{{#if (eq profile.stack_library 'Type C Only')}}
+{{assign 'no_pd' true}}
+{{/if}}
+{{#if (eq core.basic.core.usbpd_standalone 'No OS')}}
+{{assign 'no_os' true}}
+{{/if}}
+{{/with}}
+#define USBPD_TRACE_VERBOSE_LEVEL     USBPD_TRACE_VERBOSE_LEVEL_INFO /*<! Trace verbosity level for this file. */
+
+/* Includes ------------------------------------------------------------------*/
+#include "mx_usbpd_app.h"
+/* Private typedef -----------------------------------------------------------*/
+/* Private define ------------------------------------------------------------*/
+{{#with @root.usbpd_cxt~}}
+{{#unless @root.no_pd}}
+{{#with core.applicative~}}
+#define OS_PE_PRIORITY    ({{pe_thread_priority}})     /*!< Priority of PE task                        */
+#define OS_CAD_PRIORITY   ({{cad_thread_priority}})     /*!< Priority of CAD task (higher prio than PE) */
+#define OS_PE_STACK_SIZE  ({{pe_thread_stack_size}}U) /*!< Stack size for PE task                     */
+#define OS_CAD_STACK_SIZE ({{cad_thread_stack_size}}U) /*!< Stack size for CAD task                    */
+{{/with}}
+{{else}}
+{{#unless @root.no_os}}
+{{#with core.applicative~}}
+#define OS_CAD_PRIORITY   ({{cad_thread_priority}})     /*!< Priority of CAD task  */
+#define OS_CAD_STACK_SIZE ({{cad_thread_stack_size}}U) /*!< Stack size for CAD task  */
+{{/with}}
+{{/unless}}
+{{/unless}}
+{{/with}}
+/* Private macro -------------------------------------------------------------*/
+/* Private variables ---------------------------------------------------------*/
+
+usbpd_params_t       usbpd_dpm_params[USBPD_PORT_COUNT]; /*!< DPM parameters */
+{{#unless @root.no_pd}}
+static QueueHandle_t cad_queue; /*!< CAD queue handle */
+static TaskHandle_t  cad_task;  /*!< CAD task handle */
+
+static QueueHandle_t pe_queue[USBPD_PORT_COUNT]; /*!< PE queue handles */
+static TaskHandle_t  pe_task[USBPD_PORT_COUNT];  /*!< PE task handles */
+{{else}}
+{{#unless @root.no_os}}
+static TaskHandle_t  cad_task;  /*!< CAD task handle */
+static QueueHandle_t cad_queue; /*!< CAD queue handle */
+{{else}}
+static uint32_t dpm_sleep_time[USBPD_PORT_COUNT + 1U];  /*!< Stores the time to wait before next DPM loop execution */
+{{/unless}}
+{{/unless}}
+
+usbpd_settings_t usbpd_dpm_settings[USBPD_PORT_COUNT] =
+{
+{{#unless @root.no_pd}}
+  {
+    /* Supported SOP : SOP, SOP' SOP" SOP'Debug SOP"Debug */
+    .pe_supported_sop = USBPD_SUPPORTED_SOP_NONE,
+    /* Spec revision value */
+    .pe_spec_revision = USBPD_SPECIFICATION_REV3,
+    /* Default port role */
+    .pe_default_role = USBPD_PORT_PWR_ROLE_{{usbpd_cxt.interfaces.port.[0].applicative.dpm.core.default_port_role}},
+    /* Support port role swap */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.port_role_swap}}
+    .pe_pwr_role_swap_support = USBPD_TRUE,
+{{else}}
+    .pe_pwr_role_swap_support = USBPD_FALSE,
+{{/if}}
+    /* VDM Support */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.vendor_defined_messages}}
+    .pe_vdm_support = USBPD_TRUE,
+{{else}}
+    .pe_vdm_support = USBPD_FALSE,
+{{/if}}
+    /*!< Can respond successfully to a Discover Identity */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.discover_identity_response}}
+    .pe_respond_to_discov_sop_support = USBPD_TRUE,
+{{else}}
+    .pe_respond_to_discov_sop_support = USBPD_FALSE,
+{{/if}}
+    /*!< Can send a Discover Identity */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.discover_identity_sent}}
+    .pe_attempts_to_discov_sop_support = USBPD_TRUE,
+{{else}}
+    .pe_attempts_to_discov_sop_support = USBPD_FALSE,
+{{/if}}
+    /* Support Ping (only for PD3.0) */
+    .pe_ping_support = USBPD_FALSE,
+    /* Support caps counter */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.source_capabilities_counter}}
+    .pe_caps_counter_support = USBPD_TRUE,
+{{else}}
+    .pe_caps_counter_support = USBPD_FALSE,
+{{/if}}
+    /* CAD role toggle */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.cad_detection.cad_toggle}}
+    .cad_role_toggle_support = USBPD_TRUE,
+{{else}}
+    .cad_role_toggle_support = USBPD_FALSE,
+{{/if}}
+    /* CAD default Rp resistor */
+    .cad_default_resistor = USBPD_CAD_RP_{{usbpd_cxt.interfaces.port.[0].applicative.dpm.core.cad_detection.cad_default_resistor}},
+    /* CAD try feature */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.cad_detection.cad_try}}
+    .cad_try_feature_support = USBPD_TRUE,
+{{else}}
+    .cad_try_feature_support = USBPD_FALSE,
+{{/if}}
+    /* CAD accessory support */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.cad_detection.cad_accessory}}
+    .cad_accessory_support = USBPD_TRUE,
+{{else}}
+    .cad_accessory_support = USBPD_FALSE,
+{{/if}}
+    /* CAD src toggle time in ms */
+    .cad_src_toggle_time_ms = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.core.cad_detection.cad_source_toggle_time}}U,
+    /* CAD snk toggle time in ms */
+    .cad_snk_toggle_time_ms = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.core.cad_detection.cad_sink_toggle_time}}U,
+
+    /*!< PD3 SUPPORT FEATURE */
+    .pe_pd3_support.b =
+    {
+      /* Support Unchunked mode (valid only spec revision 3.0) */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.unchunck_mode}}
+      .pe_unchunk_support = USBPD_TRUE,
+{{else}}
+      .pe_unchunk_support = USBPD_FALSE,
+{{/if}}
+      /* Support fast role swap only spec revision 3.0 */
+{{#unless (eq usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.fast_role_swap 'NOT_SUPPORTED')}}
+      .pe_fast_role_swap_support = USBPD_TRUE,
+{{else}}
+      .pe_fast_role_swap_support = USBPD_FALSE,
+{{/unless}}
+      /*!< PPS message NOT supported by PE stack */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.pps_status_message}}
+      .is_get_pps_status_supported = USBPD_TRUE,
+{{else}}
+      .is_get_pps_status_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Source_Capabilities_Extended message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.source_capabilities_extended_message}}
+      .is_src_capa_ext_supported = USBPD_TRUE,
+{{else}}
+      .is_src_capa_ext_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Alert message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.alert_message}}
+      .is_alert_supported = USBPD_TRUE,
+{{else}}
+      .is_alert_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Status message supported or not by DPM (is_alert_supported must be enabled) */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.status_message}}
+      .is_get_status_supported = USBPD_TRUE,
+{{else}}
+      .is_get_status_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Manufacturer_Info message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.manufacturer_message}}
+      .is_get_manufacturer_info_supported = USBPD_TRUE,
+{{else}}
+      .is_get_manufacturer_info_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Country_Codes message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.country_codes_message}}
+      .is_get_country_codes_supported = USBPD_TRUE,
+{{else}}
+      .is_get_country_codes_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Country_Info message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.country_info_message}}
+      .is_get_country_info_supported = USBPD_TRUE,
+{{else}}
+      .is_get_country_info_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Security_Response message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.security_response_message}}
+      .is_security_request_supported = USBPD_TRUE,
+{{else}}
+      .is_security_request_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Firmware update response message supported by PE */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.firmware_update_response_message}}
+      .is_fw_update_request_supported = USBPD_TRUE,
+{{else}}
+      .is_fw_update_request_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Get Battery Capabitity and Status messages supported by PE */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.get_battery_capability_status_messages}}
+      .is_get_battery_status_supported = USBPD_TRUE,
+{{else}}
+      .is_get_battery_status_supported = USBPD_FALSE,
+{{/if}}
+    },
+{{else}}
+  {
+    /* Default port role */
+    .pe_default_role = USBPD_PORT_PWR_ROLE_{{usbpd_cxt.interfaces.port.[0].applicative.dpm.core.default_port_role}},
+{{#if (or (eq usbpd_cxt.interfaces.port.[0].applicative.power_role 'Source') (eq usbpd_cxt.interfaces.port.[0].applicative.power_role 'Dual Role'))}}
+    /* CAD default Rp resistor */
+    .cad_default_resistor = USBPD_CAD_RP_{{usbpd_cxt.interfaces.port.[0].applicative.dpm.core.cad_detection.cad_default_resistor}},
+{{/if}}
+{{/unless}}
+{{#if (gt usbpd_cxt.interfaces.port.length 1)}}
+{{#unless @root.no_pd}}
+  },
+  {
+    /* Supported SOP : SOP, SOP' SOP" SOP'Debug SOP"Debug */
+    .pe_supported_sop = USBPD_SUPPORTED_SOP_NONE,
+    /* Spec revision value */
+    .pe_spec_revision = USBPD_SPECIFICATION_REV3,
+    /* Default port role */
+    .pe_default_role = USBPD_PORT_PWR_ROLE_{{usbpd_cxt.interfaces.port.[1].applicative.dpm.core.default_port_role}},
+    /* Support port role swap */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.port_role_swap}}
+    .pe_pwr_role_swap_support = USBPD_TRUE,
+{{else}}
+    .pe_pwr_role_swap_support = USBPD_FALSE,
+{{/if}}
+    /* VDM Support */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.vendor_defined_messages}}
+    .pe_vdm_support = USBPD_TRUE,
+{{else}}
+    .pe_vdm_support = USBPD_FALSE,
+{{/if}}
+    /*!< Can respond successfully to a Discover Identity */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.discover_identity_response}}
+    .pe_respond_to_discov_sop_support = USBPD_TRUE,
+{{else}}
+    .pe_respond_to_discov_sop_support = USBPD_FALSE,
+{{/if}}
+    /*!< Can send a Discover Identity */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.discover_identity_sent}}
+    .pe_attempts_to_discov_sop_support = USBPD_TRUE,
+{{else}}
+    .pe_attempts_to_discov_sop_support = USBPD_FALSE,
+{{/if}}
+    /* Support Ping (only for PD3.0) */
+    .pe_ping_support = USBPD_FALSE,
+    /* Support caps counter */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.source_capabilities_counter}}
+    .pe_caps_counter_support = USBPD_TRUE,
+{{else}}
+    .pe_caps_counter_support = USBPD_FALSE,
+{{/if}}
+    /* CAD role toggle */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.cad_detection.cad_toggle}}
+    .cad_role_toggle_support = USBPD_TRUE,
+{{else}}
+    .cad_role_toggle_support = USBPD_FALSE,
+{{/if}}
+    /* CAD default Rp resistor */
+    .cad_default_resistor = USBPD_CAD_RP_{{usbpd_cxt.interfaces.port.[1].applicative.dpm.core.cad_detection.cad_default_resistor}},
+    /* CAD try feature */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.cad_detection.cad_try}}
+    .cad_try_feature_support = USBPD_TRUE,
+{{else}}
+    .cad_try_feature_support = USBPD_FALSE,
+{{/if}}
+    /* CAD accessory support */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.cad_detection.cad_accessory}}
+    .cad_accessory_support = USBPD_TRUE,
+{{else}}
+    .cad_accessory_support = USBPD_FALSE,
+{{/if}}
+    /* CAD src toggle time in ms */
+    .cad_src_toggle_time_ms = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.core.cad_detection.cad_source_toggle_time}}U,
+    /* CAD snk toggle time in ms */
+    .cad_snk_toggle_time_ms = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.core.cad_detection.cad_sink_toggle_time}}U,
+
+    /*!< PD3 SUPPORT FEATURE */
+    .pe_pd3_support.b =
+    {
+      /* Support Unchunked mode (valid only spec revision 3.0) */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.unchunck_mode}}
+      .pe_unchunk_support = USBPD_TRUE,
+{{else}}
+      .pe_unchunk_support = USBPD_FALSE,
+{{/if}}
+      /* Support fast role swap only spec revision 3.0 */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.fast_role_swap}}
+      .pe_fast_role_swap_support = USBPD_TRUE,
+{{else}}
+      .pe_fast_role_swap_support = USBPD_FALSE,
+{{/if}}
+      /*!< PPS message NOT supported by PE stack */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.pps_status_message}}
+      .is_get_pps_status_supported = USBPD_TRUE,
+{{else}}
+      .is_get_pps_status_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Source_Capabilities_Extended message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.source_capabilities_extended_message}}
+      .is_src_capa_ext_supported = USBPD_TRUE,
+{{else}}
+      .is_src_capa_ext_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Alert message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.alert_message}}
+      .is_alert_supported = USBPD_TRUE,
+{{else}}
+      .is_alert_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Status message supported or not by DPM (is_alert_supported must be enabled) */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.status_message}}
+      .is_get_status_supported = USBPD_TRUE,
+{{else}}
+      .is_get_status_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Manufacturer_Info message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.manufacturer_message}}
+      .is_get_manufacturer_info_supported = USBPD_TRUE,
+{{else}}
+      .is_get_manufacturer_info_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Country_Codes message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.country_codes_message}}
+      .is_get_country_codes_supported = USBPD_TRUE,
+{{else}}
+      .is_get_country_codes_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Country_Info message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.country_info_message}}
+      .is_get_country_info_supported = USBPD_TRUE,
+{{else}}
+      .is_get_country_info_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Security_Response message supported or not by DPM */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.security_response_message}}
+      .is_security_request_supported = USBPD_TRUE,
+{{else}}
+      .is_security_request_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Firmware update response message supported by PE */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.firmware_update_response_message}}
+      .is_fw_update_request_supported = USBPD_TRUE,
+{{else}}
+      .is_fw_update_request_supported = USBPD_FALSE,
+{{/if}}
+      /*!< Get Battery Capabitity and Status messages supported by PE */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.get_battery_capability_status_messages}}
+      .is_get_battery_status_supported = USBPD_TRUE,
+{{else}}
+      .is_get_battery_status_supported = USBPD_FALSE,
+{{/if}}
+    },
+{{else}}
+  {
+    /* Default port role */
+    .pe_default_role = USBPD_PORT_PWR_ROLE_{{usbpd_cxt.interfaces.port.[1].applicative.dpm.core.default_port_role}},
+{{#if (or (eq usbpd_cxt.interfaces.port.[1].applicative.power_role 'Source') (eq usbpd_cxt.interfaces.port.[1].applicative.power_role 'Dual Role'))}}
+    /* CAD default Rp resistor */
+    .cad_default_resistor = USBPD_CAD_RP_{{usbpd_cxt.interfaces.port.[1].applicative.dpm.core.cad_detection.cad_default_resistor}},
+{{/if}}
+{{/unless}}
+{{/if}}
+  }
+};
+
+{{#unless @root.no_pd}}
+usbpd_dpm_id_settings_t usbpd_dpm_id_settings[USBPD_PORT_COUNT] =
+{
+  {
+    /*!< Value provided by the USB-IF assigned to the product */
+    .xid = USBPD_XID,
+    /*!< Vendor ID (assigned by the USB-IF) */
+    .vid = USBPD_VID,
+    /*!< Product ID (assigned by the manufacturer) */
+    .pid = USBPD_PID,
+  },
+{{#if (gt usbpd_cxt.interfaces.port.length 1)}}
+  {
+    /*!< Value provided by the USB-IF assigned to the product */
+    .xid = USBPD_XID,
+    /*!< Vendor ID (assigned by the USB-IF) */
+    .vid = USBPD_VID,
+    /*!< Product ID (assigned by the manufacturer) */
+    .pid = USBPD_PID,
+  }
+{{/if}}
+};
+{{else}}
+{{/unless}}
+
+/* Private function prototypes -----------------------------------------------*/
+static void DPM_Delay(uint8_t port_num, uint32_t time_ms);
+{{#unless @root.no_pd}}
+static void USBPD_CAD_Task(void *args);
+{{else}}
+{{#unless @root.no_os}}
+static void USBPD_CAD_Task(void *args);
+{{/unless}}
+{{/unless}}
+static void DPM_CADTaskWakeUp(void);
+static void DPM_CADCallback(uint8_t port_num, usbpd_cad_event_t state, usbpd_cc_line_t cc);
+{{#unless @root.no_pd}}
+static void USBPD_PE_Task(void *args);
+static void DPM_PE_TaskWakeUp(uint8_t port_num);
+static void DPM_StartPETask(uint8_t port_num);
+{{else}}
+{{/unless}}
+/**
+  * @brief  Application USBPD Initialization.
+  * @param  status
+  */
+usbpd_status_t app_usbpd_init(void)
+{
+
+  return USBPD_DPM_Init();
+}
+
+/**
+  * @brief  Application USBPD De-Initialization.
+  * @retval none
+  */
+void app_usbpd_deinit(void)
+{
+
+  USBPD_DPM_DeInit();
+}
+
+/**
+  * @brief  Initialize the core stack (port power role, PWR_IF, CAD and PE Init procedures).
+  * @retval USBPD status.
+  */
+usbpd_status_t USBPD_DPM_Init(void)
+{
+  uint32_t stack_dynamemsize;
+  usbpd_status_t ret = USBPD_OK;
+{{#unless @root.no_pd}}
+  /* CAD callback definition */
+  static const usbpd_pe_cb_t dpmCallbacks =
+  {
+    USBPD_DPM_SetupNewPower,
+    USBPD_DPM_HardReset,
+    USBPD_DPM_EvaluatePowerRoleSwap,
+    USBPD_DPM_Notification,
+    USBPD_DPM_ExtendedMessageReceived,
+    USBPD_DPM_GetDataInfo,
+    USBPD_DPM_SetDataInfo,
+    USBPD_DPM_EvaluateRequest,
+    USBPD_DPM_SNK_EvaluateCapabilities,
+    USBPD_DPM_PowerRoleSwap,
+    DPM_PE_TaskWakeUp,
+    USBPD_DPM_EvaluateVconnSwap,
+    USBPD_DPM_PE_VconnPwr,
+    USBPD_DPM_EnterErrorRecovery,
+    USBPD_DPM_EvaluateDataRoleSwap,
+    USBPD_DPM_IsPowerReady,
+    USBPD_DPM_UserTimerCounter
+  };
+{{else}}
+{{/unless}}
+  /* Check the lib selected */
+  if (USBPD_TRUE != USBPD_PE_CheckLIB(LIB_ID))
+  {
+    ret = USBPD_ERROR;
+    return ret;
+  }
+
+  /* Initialize DPM User */
+  if (USBPD_DPM_UserInit() != USBPD_OK)
+  {
+    ret = USBPD_ERROR;
+    return ret;
+  }
+
+  /* Get dynamic memory allocated by usbpd stack */
+  stack_dynamemsize = USBPD_PE_GetMemoryConsumption();
+  (void)stack_dynamemsize;
+
+  /* Initialise the USBPD trace */
+  USBPD_TRACE_Init();
+
+  static const usbpd_cad_cb_t CAD_cbs = { DPM_CADCallback, DPM_CADTaskWakeUp };
+
+  static const usbpd_pwr_cb_t PWR_cbs =
+  {
+   USBPD_PWR_HW_IF_Init,
+   USBPD_PWR_HW_IF_DeInit,
+   USBPD_PWR_HW_IF_VBUSInit,
+   USBPD_PWR_HW_IF_VBUSDeInit,
+   USBPD_PWR_HW_IF_EnableVBUS,
+   USBPD_PWR_HW_IF_DisableVBUS,
+   USBPD_PWR_HW_IF_IsEnabledVBUS,
+   USBPD_PWR_HW_IF_VConnInit,
+   USBPD_PWR_HW_IF_VConnDeInit,
+   USBPD_PWR_HW_IF_EnableVConn,
+   USBPD_PWR_HW_IF_DisableVConn,
+   USBPD_PWR_HW_IF_IsEnabledVConn,
+   USBPD_PWR_HW_IF_VBUSGetVoltage,
+   USBPD_PWR_HW_IF_VBUSGetCurrent,
+   USBPD_PWR_HW_IF_VBUSSetVoltage_Fixed,
+   USBPD_PWR_HW_IF_VBUSSetVoltage_Variable,
+   USBPD_PWR_HW_IF_VBUSSetVoltage_Battery,
+   USBPD_PWR_HW_IF_VBUSSetVoltage_APDO,
+   USBPD_PWR_HW_IF_SetRole,
+   USBPD_PWR_HW_IF_SetPowerMode,
+   USBPD_PWR_HW_IF_RegisterVBUSDetectCallback,
+  };
+
+  /* Register the power hardware interface callbacks  */
+  if (USBPD_PWR_Register_HW_IF_Callbacks(&PWR_cbs) != USBPD_OK)
+  {
+    ret = USBPD_ERROR;
+    return ret;
+  }
+
+{{#unless @root.no_pd}}
+{{#if (eq usbpd_cxt.interfaces.use_timerserver.tim_if_milliseconds 'Timer')}}
+  /* Initialize timer to manage protocol timing in ms  */
+  if (USBPD_TIMERSERVER_HW_IF_Ms_Init()!= USBPD_OK)
+  {
+    ret = USBPD_ERROR;
+    return ret;
+  }
+{{/if}}
+  cad_queue = xQueueCreate(USBPD_PORT_COUNT, sizeof(uint16_t));
+  if (cad_queue == 0)
+  {
+    USBPD_TRACE_ERROR_PRINTF(USBPD_PORT_0, "CAD Queue creation failed");
+    ret = USBPD_ERROR;
+    return ret;
+  }
+
+  /* Register the queue to be viewable in a RTOS kernel aware debugger */
+  vQueueAddToRegistry(cad_queue, "cad_queue");
+
+  if (xTaskCreate(USBPD_CAD_Task,
+                  "CAD Task",
+                  OS_CAD_STACK_SIZE,
+                  (void *) NULL,
+                  OS_CAD_PRIORITY,
+                  &cad_task) != pdPASS)
+  {
+    /* If task creation fails try to increase configTOTAL_HEAP_SIZE */
+    USBPD_TRACE_ERROR_PRINTF(USBPD_PORT_0, "Task creation failed, try to increase configTOTAL_HEAP_SIZE");
+    ret = USBPD_ERROR;
+    return ret;
+  }
+
+  for (uint8_t port_index = 0U; port_index < (uint8_t)USBPD_PORT_COUNT; port_index++)
+  {
+    /* Create the queue corresponding to PE task */
+    pe_queue[port_index] = xQueueCreate(1U, sizeof(uint16_t));
+    if (pe_queue[port_index] == 0)
+    {
+      USBPD_TRACE_ERROR_PRINTF(USBPD_PORT_0, "PE (port %d) Queue creation failed", port_index);
+      ret = USBPD_ERROR;
+      return ret;
+    }
+
+    /* Register the queue to be viewable in a RTOS kernel aware debugger */
+#if (USBPD_PORT_COUNT > 1)
+    vQueueAddToRegistry(pe_queue[port_index], (port_index == USBPD_PORT_0) ? "pe_queue[0]" : "pe_queue[1]");
+#else
+    vQueueAddToRegistry(pe_queue[port_index], "pe_queue[0]");
+#endif /* USBPD_PORT_COUNT > 1 */
+
+    /* Tasks definition */
+    if (xTaskCreate(USBPD_PE_Task,
+#if (USBPD_PORT_COUNT > 1)
+                    (port_index == USBPD_PORT_0) ? "PE port0 Task" : "PE port1 Task",
+#else
+                    "PE port0 Task",
+#endif /* USBPD_PORT_COUNT > 1 */
+                    OS_PE_STACK_SIZE,
+                    (void *) NULL,
+                    OS_PE_PRIORITY,
+                    &pe_task[port_index]) != pdPASS)
+    {
+      /* If task creation fails try to increase configTOTAL_HEAP_SIZE */
+      USBPD_TRACE_ERROR_PRINTF(port_index, "Task creation failed, try to increase configTOTAL_HEAP_SIZE");
+      ret = USBPD_ERROR;
+      return ret;
+    }
+
+    /* Register the DPM delay function */
+    if (USBPD_DPM_User_RegisterDelayCallback(port_index, DPM_Delay) != USBPD_OK)
+    {
+      ret = USBPD_ERROR;
+      return ret;
+    }
+
+    /* Variable to be sure that DPM is correctly initialized */
+    usbpd_dpm_params[port_index].dpm_flag_initialized = USBPD_FALSE;
+
+    /* Apply the stack settings */
+    usbpd_dpm_params[port_index].pe_spec_revision     = usbpd_dpm_settings[port_index].pe_spec_revision;
+    usbpd_dpm_params[port_index].pe_power_role        = usbpd_dpm_settings[port_index].pe_default_role;
+    usbpd_dpm_params[port_index].pe_flag_swap_ongoing = USBPD_FALSE;
+    usbpd_dpm_params[port_index].active_cc            = CCNONE;
+    usbpd_dpm_params[port_index].vconn_cc             = CCNONE;
+    usbpd_dpm_params[port_index].vconn_status         = USBPD_FALSE;
+
+    if (usbpd_dpm_params[port_index].pe_power_role == USBPD_PORT_PWR_ROLE_SNK)
+    {
+      usbpd_dpm_params[port_index].skip_snk_Wait_cap_Timer = USBPD_FALSE;
+    }
+
+    /* Get RxOredered Set from UCPD configuration */
+    USBPD_CAD_HW_IF_GetRxOrderedSet(port_index, &usbpd_dpm_settings[port_index]);
+
+    /* Init CAD */
+    usbpd_cad_status_t retcad = USBPD_CAD_Init(port_index, &CAD_cbs,
+                                               &usbpd_dpm_settings[port_index], &usbpd_dpm_params[port_index]);
+    if (retcad == USBPD_CAD_MALLOCERROR)
+    {
+      /* Malloc error, try to increase heap size in linker settings */
+
+      USBPD_TRACE_ERROR_PRINTF(port_index, "Malloc error, try to increase heap size in linker settings");
+
+      ret = USBPD_MALLOCERROR;
+      return ret;
+    }
+    if (retcad != USBPD_CAD_OK)
+    {
+      ret = USBPD_ERROR;
+      return ret;
+    }
+
+    /* Initialize PE */
+    usbpd_status_t retpe = USBPD_PE_Init(port_index, (usbpd_settings_t *)&usbpd_dpm_settings[port_index],
+                                         &usbpd_dpm_params[port_index], &dpmCallbacks);
+    if (retpe == USBPD_MALLOCERROR)
+    {
+      /* Malloc error, try to increase heap size in linker settings */
+      USBPD_TRACE_ERROR_PRINTF(port_index, "Malloc error, try to increase heap size in linker settings");
+      ret = USBPD_MALLOCERROR;
+      return ret;
+    }
+    else if (retpe != USBPD_OK)
+    {
+      ret = USBPD_ERROR;
+      return ret;
+    }
+    else
+    {
+      /* Success case */
+    }
+
+    /* DPM is correctly initialized */
+    usbpd_dpm_params[port_index].dpm_flag_initialized = USBPD_TRUE;
+
+    /* Enable CAD on Port 0 */
+    USBPD_CAD_PortEnable(port_index);
+  }
+{{else}}
+{{#unless @root.no_os}}
+  cad_queue = xQueueCreate(USBPD_PORT_COUNT, sizeof(uint16_t));
+  if (cad_queue == 0)
+  {
+    USBPD_TRACE_ERROR_PRINTF(USBPD_PORT_0, "CAD Queue creation failed");
+    ret = USBPD_ERROR;
+    return ret;
+  }
+
+  /* Register the queue to be viewable in a RTOS kernel aware debugger */
+  vQueueAddToRegistry(cad_queue, "cad_queue");
+
+  if (xTaskCreate(USBPD_CAD_Task,
+                  "CAD Task",
+                  OS_CAD_STACK_SIZE,
+                  (void *) NULL,
+                  OS_CAD_PRIORITY,
+                  &cad_task) != pdPASS)
+  {
+    /* If task creation fails try to increase configTOTAL_HEAP_SIZE */
+    USBPD_TRACE_ERROR_PRINTF(USBPD_PORT_0, "Task creation failed, try to increase configTOTAL_HEAP_SIZE");
+    ret = USBPD_ERROR;
+    return ret;
+  }
+{{/unless}}
+  for (uint8_t port_index = 0U; port_index < (uint8_t)USBPD_PORT_COUNT; port_index++)
+  {
+    /* Register the DPM delay function */
+    if (USBPD_DPM_User_RegisterDelayCallback(port_index, DPM_Delay) != USBPD_OK)
+    {
+      ret = USBPD_ERROR;
+      return ret;
+    }
+
+    /* Variable to be sure that DPM is correctly initialized */
+    usbpd_dpm_params[port_index].dpm_flag_initialized = USBPD_FALSE;
+
+    /* Apply the stack settings */
+    usbpd_dpm_params[port_index].pe_power_role        = usbpd_dpm_settings[port_index].pe_default_role;
+
+    /* Init CAD */
+    usbpd_cad_status_t retcad = USBPD_CAD_Init(port_index, &CAD_cbs,
+                                               &usbpd_dpm_settings[port_index], &usbpd_dpm_params[port_index]);
+    if (retcad == USBPD_CAD_MALLOCERROR)
+    {
+      /* Malloc error, try to increase heap size in linker settings */
+
+      USBPD_TRACE_ERROR_PRINTF(port_index, "Malloc error, try to increase heap size in linker settings");
+
+      ret = USBPD_MALLOCERROR;
+      return ret;
+    }
+    else if (retcad != USBPD_CAD_OK)
+    {
+      ret = USBPD_ERROR;
+      return ret;
+    }
+    else
+    {
+      /* Success case */
+    }
+    /* Init PHY */
+    if (USBPD_OK != USBPD_PHY_Init(port_index, (usbpd_phy_callbacks_t *)NULL, (uint8_t *)NULL,
+                                   usbpd_dpm_settings[port_index].pe_default_role, (uint32_t)USBPD_SUPPORTED_SOP_NONE))
+    {
+      ret = USBPD_ERROR;
+      return ret;
+    }
+
+    /* Enable CAD on Port */
+    USBPD_CAD_PortEnable(port_index);
+  }
+{{/unless}}
+
+  return ret;
+}
+
+/**
+  * @brief  DeInitialize the core stack (port power role, PWR_IF, CAD and PE Init procedures).
+  */
+void USBPD_DPM_DeInit(void)
+{
+  /* DeInitialize DPM User */
+  USBPD_DPM_UserDeInit();
+
+  /* DeInitialize the USBPD trace */
+  USBPD_TRACE_DeInit();
+
+  for (uint8_t port_index = 0U; port_index < (uint8_t)USBPD_PORT_COUNT; ++port_index)
+  {
+    /* DeInitialize CAD */
+    USBPD_CAD_DeInit(port_index);
+{{#unless @root.no_pd}}
+    vTaskDelete(cad_task);
+
+    /* DeInitialize PE */
+    vTaskDelete(pe_task[port_index]);
+{{else}}
+    /* DeInitialize PHY */
+    USBPD_PHY_DeInit(port_index);
+{{/unless}}
+    /* Disable CAD on Port 0 */
+    USBPD_CAD_PortDisable(port_index);
+  }
+}
+{{#unless @root.no_pd}}
+{{#if (eq usbpd_cxt.interfaces.use_timerserver.tim_if_milliseconds 'HAL timebase')~}}
+/**
+  * @brief This function is called to increment a global variable @ref uwTick
+  *        used as application time base, and increment the USBPD timebase.
+  * @note This function overwrite the default __WEAK function to add the USBPD TimerCounter handling.
+  */
+void HAL_IncTick(void)
+{
+  /* Default HAL IncTick implementation */
+  uwTick += (uint32_t)uwTickFreq;
+
+  /* Additional USBPD tick */
+  USBPD_TIMERSERVER_TimerCounter();
+}
+{{/if}}
+
+/**
+  * @brief  DPM error handler.
+  *         This function is called to block application execution in case of an unexpected fatal error
+  */
+void USBPD_DPM_ErrorHandler(void)
+{
+  for (;;)
+  {
+    /* Blocking error */
+  }
+}
+{{else}}
+{{#unless @root.no_os}}
+/**
+  * @brief  DPM main loop (OS use). Must be run in a taskwhen using an OS.
+  * @return Time in ms for the OS to call back the function.
+  */
+uint32_t USBPD_DPM_Task(void)
+{
+  uint32_t timing;
+
+  /* Run the CAD task */
+  timing = USBPD_CAD_Process();
+
+  /* Run the DPM User layer */
+  USBPD_DPM_UserExecute(NULL);
+
+  return timing;
+}
+{{else}}
+/**
+  * @brief  DPM main loop (bare-metal use). Must be run in an infinite loop.
+  */
+void USBPD_DPM_Run(void)
+{
+  static uint32_t dpm_sleep_start[USBPD_PORT_COUNT + 1]; /*!< Stores the time when the sleep mode has been entered */
+
+  /* Run the CAD task */
+  if ((HAL_GetTick() - dpm_sleep_start[USBPD_PORT_COUNT]) >= dpm_sleep_time[USBPD_PORT_COUNT])
+  {
+    dpm_sleep_time[USBPD_PORT_COUNT] = USBPD_CAD_Process();
+    dpm_sleep_start[USBPD_PORT_COUNT] = HAL_GetTick();
+  }
+
+  /* Run the DPM User layer */
+  USBPD_DPM_UserExecute(NULL);
+}
+{{/unless}}
+{{/unless}}
+/**
+  * @}
+  */
+
+/** @defgroup USBPD_DPM_Private_Functions USBPD_DPM Private Functions
+  * @{
+  */
+
+/**
+  * @brief  OS specific delay.
+  */
+static void DPM_Delay(uint8_t port_num, uint32_t time_ms)
+{
+  (void)port_num;
+{{#unless @root.no_pd}}
+  vTaskDelay(pdMS_TO_TICKS(time_ms));
+{{else}}
+  HAL_Delay(time_ms);
+{{/unless}}
+}
+
+/**
+  * @brief  WakeUp CAD task.
+  */
+static void DPM_CADTaskWakeUp(void)
+{
+  /* WakeUp the CAD task */
+{{#unless @root.no_pd}}
+  uint32_t event = 0xFFFFU;
+  long taskWoken = pdFALSE;
+
+
+  /* Determine whether we are in thread mode or handler mode. */
+  if (__get_IPSR() != 0)
+  {
+    (void)xQueueSendFromISR(cad_queue, &event, &taskWoken);
+    portYIELD_FROM_ISR(taskWoken);
+  }
+  else
+  {
+    (void)xQueueSend(cad_queue, &event, 0);
+  }
+{{else}}
+{{#unless @root.no_os}}
+  uint32_t event = 0xFFFFU;
+  long taskWoken = pdFALSE;
+
+
+  /* Determine whether we are in thread mode or handler mode. */
+  if (__get_IPSR() != 0)
+  {
+    (void)xQueueSendFromISR(cad_queue, &event, &taskWoken);
+    portYIELD_FROM_ISR(taskWoken);
+  }
+  else
+  {
+    (void)xQueueSend(cad_queue, &event, 0);
+  }
+{{else}}
+  dpm_sleep_time[USBPD_PORT_COUNT] = 0U;
+{{/unless}}
+{{/unless}}
+}
+{{#unless @root.no_pd}}
+/**
+  * @brief  Main task for CAD layer.
+  * @param  args Not used.
+  */
+static void USBPD_CAD_Task(void *args)
+{
+  uint32_t timing;
+  uint32_t event;
+  TickType_t ticks;
+
+  for (;;)
+  {
+    timing = USBPD_CAD_Process();
+
+    ticks = 0;
+    if (timing == 0xFFFFFFFFU)
+    {
+      ticks = portMAX_DELAY;
+    }
+    else if (timing != 0)
+    {
+      ticks = timing / portTICK_PERIOD_MS;
+      if (ticks == 0)
+      {
+        ticks = 1;
+      }
+    }
+    (void)xQueueReceive(cad_queue, &event, ticks);
+  }
+}
+{{else}}
+{{#unless @root.no_os}}
+/**
+  * @brief  Main task for CAD layer.
+  * @param  args Not used.
+  */
+static void USBPD_CAD_Task(void *args)
+{
+  uint32_t timing;
+  uint32_t event;
+  TickType_t ticks;
+
+  for (;;)
+  {
+    timing = USBPD_DPM_Task();
+
+    ticks = 0;
+    if (timing == 0xFFFFFFFFU)
+    {
+      ticks = portMAX_DELAY;
+    }
+    else if (timing != 0)
+    {
+      ticks = timing / portTICK_PERIOD_MS;
+      if (ticks == 0)
+      {
+        ticks = 1;
+      }
+    }
+    (void)xQueueReceive(cad_queue, &event, ticks);
+  }
+}
+{{/unless}}
+{{/unless}}
+/**
+  * @brief  CallBack reporting events on a specified port from CAD layer.
+  * @param  port_num Port number.
+  * @param  state    CAD state.
+  * @param  cc       CC line for the USBPD communication.
+  */
+static void DPM_CADCallback(uint8_t port_num, usbpd_cad_event_t state, usbpd_cc_line_t cc)
+{
+  USBPD_TRACE_Add(USBPD_TRACE_CADEVENT, port_num, (uint8_t)state, NULL, 0U);
+
+  (void)cc; /* Unused */
+{{#unless @root.no_pd}}
+  switch (state)
+  {
+    case USBPD_CAD_EVENT_ATTEMC:
+    {
+      usbpd_dpm_params[port_num].vconn_status = USBPD_TRUE;
+
+      USBPD_DPM_UserCableDetection(port_num, USBPD_CAD_EVENT_ATTEMC);
+      DPM_StartPETask(port_num);
+      break;
+    }
+    case USBPD_CAD_EVENT_ATTACHED:
+      USBPD_DPM_UserCableDetection(port_num, USBPD_CAD_EVENT_ATTACHED);
+      DPM_StartPETask(port_num);
+      break;
+
+    case USBPD_CAD_EVENT_DETACHED:
+    case USBPD_CAD_EVENT_EMC:
+    {
+      /* Terminate PE task */
+      uint8_t timeout = 0;
+
+      /* WakeUp PE task to let him enter suspend mode */
+      DPM_PE_TaskWakeUp(port_num);
+
+      /* Wait PE Let time to PE to complete the ongoing action */
+      while (eSuspended != eTaskGetState(pe_task[port_num]))
+      {
+        vTaskDelay(pdMS_TO_TICKS(1U));
+
+        timeout++;
+        if (timeout > 30U)
+        {
+          /* Suspend the PE task */
+          vTaskSuspend(pe_task[port_num]);
+          break;
+        }
+      }
+
+      /* Stop the PE state machine */
+      USBPD_PE_StateMachine_Stop(port_num);
+      usbpd_dpm_params[port_num].pe_flag_swap_ongoing = USBPD_FALSE;
+      usbpd_dpm_params[port_num].pe_pwr_status = USBPD_PWR_STATE_NO;
+      USBPD_DPM_UserCableDetection(port_num, state);
+
+      usbpd_dpm_params[port_num].vconn_status = USBPD_FALSE;
+
+      USBPD_DPM_Notification(port_num, USBPD_NOTIFY_USBSTACK_STOP);
+      break;
+    }
+    default:
+      /* Nothing to do */
+      break;
+  }
+{{else}}
+  switch (state)
+  {
+#if defined(USBPDCORE_VPD)
+    case USPPD_CAD_EVENT_VPD:
+#endif /* USBPDCORE_VPD */
+    case USBPD_CAD_EVENT_ATTEMC:
+    case USBPD_CAD_EVENT_ATTACHED:
+    {
+      USBPD_DPM_UserCableDetection(port_num, state);
+      USBPD_DPM_Notification(port_num, USBPD_NOTIFY_USBSTACK_START);
+      break;
+    }
+    case USBPD_CAD_EVENT_DETACHED :
+    case USBPD_CAD_EVENT_EMC:
+    {
+      USBPD_DPM_UserCableDetection(port_num, state);
+      USBPD_DPM_Notification(port_num, USBPD_NOTIFY_USBSTACK_STOP);
+      break;
+    }
+    default:
+      /* Nothing to do */
+      break;
+  }
+{{/unless}}
+}
+{{#unless @root.no_pd}}
+/**
+  * @brief  WakeUp PE task.
+  * @param  port_num port number.
+  */
+static void DPM_PE_TaskWakeUp(uint8_t port_num)
+{
+  uint32_t event = 0xFFFFU;
+  long taskWoken = pdFALSE;
+
+  /* Determine whether we are in thread mode or handler mode. */
+  if (__get_IPSR() != 0)
+  {
+    (void)xQueueSendFromISR(pe_queue[port_num], &event, &taskWoken);
+    portYIELD_FROM_ISR(taskWoken);
+  }
+  else
+  {
+    (void)xQueueSend(pe_queue[port_num], &event, 0);
+  }
+}
+
+/**
+  * @brief  Start the PE task.
+  * @param  port_num Port number.
+  */
+static void DPM_StartPETask(uint8_t port_num)
+{
+  USBPD_PE_StateMachine_Reset(port_num);
+  /* Resume the PE task */
+  switch (port_num)
+  {
+    case USBPD_PORT_0:
+    case USBPD_PORT_1:
+    {
+      vTaskResume(pe_task[port_num]);
+      break;
+    }
+    default:
+    {
+      USBPD_DPM_ErrorHandler();
+      break;
+    }
+  }
+  USBPD_DPM_Notification(port_num, USBPD_NOTIFY_USBSTACK_START);
+}
+
+/**
+  * @brief  Main task for PE layer.
+  * @param  args Contains the port number.
+  */
+static void USBPD_PE_Task(void *args)
+{
+  uint8_t port_num = (uint32_t)args;
+  uint32_t timing;
+  uint32_t event;
+  TickType_t ticks;
+
+  for (;;)
+  {
+    if (usbpd_dpm_params[port_num].pe_flag_is_connected == USBPD_FALSE)
+    {
+      /* If the port is no more connected, suspend the PE thread */
+      vTaskSuspend(xTaskGetCurrentTaskHandle());
+    }
+
+#if defined(USBPD_SNK)
+    timing = USBPD_PE_StateMachine_SNK(port_num);
+#elif defined(USBPD_SRC)
+    timing = USBPD_PE_StateMachine_SRC(port_num);
+#else
+    timing = USBPD_PE_StateMachine_DRP(port_num);
+#endif /* USBPD_SNK */
+
+    ticks = 0;
+    if (timing == 0xFFFFFFFFU)
+    {
+      ticks = portMAX_DELAY;
+    }
+    else if (timing != 0)
+    {
+      ticks = timing / portTICK_PERIOD_MS;
+      if (ticks == 0)
+      {
+        ticks = 1;
+      }
+    }
+    (void)xQueueReceive(pe_queue[port_num], &event, ticks);
+  }
+}
+{{else}}
+{{/unless}}
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */

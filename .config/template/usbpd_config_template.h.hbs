@@ -1,0 +1,125 @@
+{{assign "usbpdFilter" (JSONparse '{"cgroup": "STM32CubeMX2 Config", "csub": "USBPD"}')~}}
+{{assign 'usbpd_context' (@root.SWConfigurationAPI.getInstancesConfiguration @root.usbpdFilter)~}}
+{{assign 'usbpd_cxt' @root.usbpd_context.[0].settings.parameters~}}
+{{assign 'no_pd' false}}
+/**
+  ******************************************************************************
+  * @file    usbpd_config.h
+  * @brief  Configuration for STM32 USBPD private aliases
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025-2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_usbpd_license.md file
+  * in the root directory of this software component.
+  * If no mx_usbpd_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+{{#with @root.usbpd_cxt~}}
+{{#if (eq profile.stack_library 'Type C Only')}}
+{{assign 'no_pd' true}}
+{{/if}}
+{{/with}}
+/* Define to prevent recursive inclusion -------------------------------------*/
+#ifndef USBPD_CONFIG_H
+#define USBPD_CONFIG_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
+/* Includes ------------------------------------------------------------------*/
+#include "mx_hal_def.h"
+{{#if (or (eq usbpd_cxt.interfaces.port.[0].pwr_if.select_pwr_if 'Tcpp02') (eq usbpd_cxt.interfaces.port.[0].pwr_if.select_pwr_if 'Tcpp03'))~}}
+#include "mx_tcpp0203.h"
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].pwr_if.select_pwr_if 'Tcpp01')~}}
+#include "mx_tcpp01.h"
+{{/if}}
+/* Exported types ------------------------------------------------------------*/
+/* Exported constants --------------------------------------------------------*/
+/* Exported macros -----------------------------------------------------------*/
+{{#with @root.usbpd_cxt~}}
+{{#unless @root.no_pd}}
+{{#with core.applicative.id~}}
+#define USBPD_VID  {{vendor_id}} /*!< Vendor ID (assigned by the USB-IF)               */
+#define USBPD_PID  {{product_id}} /*!< Product ID (assigned by the manufacturer)       */
+#define USBPD_XID  {{xid}} /*!< Value provided by the USB-IF assigned to the product   */
+{{/with}}
+{{else}}
+{{/unless}}
+{{/with}}
+/******************************************************************************/
+/*   CAD ALIASES   (private aliases)                                     */
+/******************************************************************************/
+/* port 0 */
+#define usbpd_ucpd_0_gethandle        mx_{{lowercase usbpd_cxt.interfaces.port.[0].phy_if.hw_resources_allocation.ucpd_instance.selection}}_gethandle
+#define usbpd_it_0_enable()           HAL_CORTEX_NVIC_EnableIRQ({{usbpd_cxt.interfaces.port.[0].phy_if.hw_resources_allocation.ucpd_instance.selection}}_IRQn);
+{{#if (gt usbpd_cxt.interfaces.port.length 1)~}}
+/* port 1 */
+#define usbpd_ucpd_1_gethandle        mx_{{lowercase usbpd_cxt.interfaces.port.[1].phy_if.hw_resources_allocation.ucpd_instance.selection}}_gethandle
+#define usbpd_it_1_enable()           HAL_CORTEX_NVIC_EnableIRQ({{usbpd_cxt.interfaces.port.[1].phy_if.hw_resources_allocation.ucpd_instance.selection}}_IRQn);
+{{/if}}
+{{#unless (eq usbpd_cxt.interfaces.port.[0].pwr_if.select_pwr_if 'Custom')~}}
+/******************************************************************************/
+/*   PWR ALIASES   (private aliases)                                     */
+/******************************************************************************/
+/* port 0 */
+{{#if (or (eq usbpd_cxt.interfaces.port.[0].pwr_if.select_pwr_if 'Tcpp02') (eq usbpd_cxt.interfaces.port.[0].pwr_if.select_pwr_if 'Tcpp03'))~}}
+#define usbpd_tcpp0203_0_getobject    mx_tcpp0203_0_getobject
+#define usbpd_adc_gethandle           TCPP0203_0_ADC_GETHANDLE
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].pwr_if.select_pwr_if 'Tcpp01')~}}
+#define usbpd_tcpp01_0_getobject      mx_tcpp01_0_getobject
+#define usbpd_adc_gethandle           TCPP01_0_ADC_GETHANDLE
+{{/if}}
+
+{{#if (gt usbpd_cxt.interfaces.port.length 1)~}}
+/* port 1 */
+{{#if (or (eq usbpd_cxt.interfaces.port.[1].pwr_if.select_pwr_if 'Tcpp02') (eq usbpd_cxt.interfaces.port.[1].pwr_if.select_pwr_if 'Tcpp03'))~}}
+#define usbpd_tcpp0203_1_getobject    mx_tcpp0203_1_getobject
+#define usbpd_adc_gethandle           TCPP0203_1_ADC_GETHANDLE
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].pwr_if.select_pwr_if 'Tcpp01')~}}
+#define usbpd_tcpp01_1_getobject      mx_tcpp01_1_getobject
+#define usbpd_adc_gethandle           TCPP01_1_ADC_GETHANDLE
+{{/if}}
+{{/if}}
+{{/unless}}
+{{#unless @root.no_pd}}
+/******************************************************************************/
+/*   TIMERSERVER ALIASES   (private aliases)                                     */
+/******************************************************************************/
+/* timings in us */
+#define usbpd_tim_us_gethandle        mx_{{lowercase usbpd_cxt.interfaces.use_timerserver.hw_resources_allocation.tim_instance_microseconds.selection}}_gethandle
+#define usbpd_tim_us_enable_clk       HAL_RCC_{{usbpd_cxt.interfaces.use_timerserver.hw_resources_allocation.tim_instance_microseconds.selection}}_EnableClock
+#define usbpd_us_tim_disable_clk      HAL_RCC_{{usbpd_cxt.interfaces.use_timerserver.hw_resources_allocation.tim_instance_microseconds.selection}}_DisableClock
+{{#if (eq usbpd_cxt.interfaces.use_timerserver.tim_if_milliseconds 'Timer')~}}
+/* timing in ms */
+#define usbpd_tim_ms_gethandle        mx_{{lowercase usbpd_cxt.interfaces.use_timerserver.hw_resources_allocation.tim_instance_milliseconds.selection}}_gethandle
+{{assign 'tim_ms_context' (@root.NvicAPI.getAllocatedResourceNeedsByHwInstance @root.usbpd_cxt.interfaces.use_timerserver.hw_resources_allocation.tim_instance_milliseconds.selection)~}}
+{{#each @root.tim_ms_context}}
+{{assign 'nvic_tim_ms_need' (@root.NvicAPI.getNeedById needId)~}}
+#define USBPD_TIM_MS_IRQ              {{@root.nvic_tim_ms_need.name}}_IRQn
+{{/each}}
+{{/if}}
+{{else}}
+{{/unless}}
+{{#if (eq usbpd_cxt.core.basic.core.trace true)~}}
+/******************************************************************************/
+/*   TRACE ALIASES   (private aliases)                                     */
+/******************************************************************************/
+#define usbpd_trace_gethandle         mx_{{lowercase usbpd_cxt.interfaces.use_trace.hw_resources_allocation.uart_instance.selection}}_uart_gethandle
+#define usbpd_trace_disable_clk       HAL_RCC_{{usbpd_cxt.interfaces.use_trace.hw_resources_allocation.uart_instance.selection}}_DisableClock
+#define usbpd_trace_enable_clk        HAL_RCC_{{usbpd_cxt.interfaces.use_trace.hw_resources_allocation.uart_instance.selection}}_EnableClock
+{{else}}
+{{/if}}
+/* Exported functions ------------------------------------------------------- */
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
+
+#endif /* USBPD_CONFIG_H */

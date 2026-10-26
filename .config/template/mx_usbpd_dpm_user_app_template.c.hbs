@@ -1,0 +1,2713 @@
+{{assign "usbpdFilter" (JSONparse '{"cgroup": "STM32CubeMX2 Config", "csub": "USBPD"}')~}}
+{{assign 'usbpd_context' (@root.SWConfigurationAPI.getInstancesConfiguration @root.usbpdFilter)~}}
+{{assign 'usbpd_cxt' @root.usbpd_context.[0].settings.parameters~}}
+{{assign 'no_pd' false}}
+/**
+  ******************************************************************************
+  * @file    mx_usbpd_dpm_user_app.c
+  * @brief   DPM User Layer module.
+  *          This file provides a set of functions to manage the DPM User layer.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025-2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_usbpd_license.md file
+  * in the root directory of this software component.
+  * If no mx_usbpd_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+{{#with @root.usbpd_cxt~}}
+{{#if (eq profile.stack_library 'Type C Only')}}
+{{assign 'no_pd' true}}
+{{/if}}
+{{/with}}
+#define USBPD_TRACE_VERBOSE_LEVEL     USBPD_TRACE_VERBOSE_LEVEL_INFO /*<! Trace verbosity level for this file. */
+
+/* Includes ------------------------------------------------------------------*/
+#include "mx_usbpd_dpm_user_app.h"
+
+/** @addtogroup STM32_USBPD_APPLICATION
+  * @{
+  */
+
+/** @addtogroup USBPD_DPM_USER
+  * @{
+  */
+
+/* Private types -----------------------------------------------------------*/
+/** @defgroup USBPD_DPM_USER_Private_Types USBPD_DPM_USER Private Types
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private constants ---------------------------------------------------------*/
+/** @defgroup USBPD_DPM_USER_Private_Constants USBPD_DPM_USER Private Constants
+  * @{
+  */
+{{#unless @root.no_pd}}
+#define DEFAULT_PDO_SELCTION_METHOD USBPD_DPM_PDO_SEL_METHOD_MAX_PWR /*!< Default PDO selection method */
+{{else}}
+{{/unless}}
+/**
+  * @}
+  */
+
+/* Private macros -------------------------------------------------------------*/
+/** @defgroup USBPD_DPM_USER_Private_Macros USBPD_DPM_USER Private Macros
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private functions ---------------------------------------------------------*/
+/** @defgroup USBPD_DPM_USER_Private_Functions USBPD_DPM_USER Private Functions
+  * @{
+  */
+{{#unless @root.no_pd}}
+static void DPM_SNK_BuildRDOfromSelectedPDO(uint8_t port_num, uint8_t index_src_pdo,
+                                            const usbpd_dpm_snk_pwr_request_details_t *p_request_pwr_details,
+                                            usbpd_rdo_snk_t *rdo_out, usbpd_core_pdo_type_t *p_pwr_object);
+static uint32_t DPM_FindVoltageIndex(uint8_t port_num,
+                                     usbpd_dpm_snk_pwr_request_details_t *p_request_pwr_details,
+                                     usbpd_dpm_pdo_sel_method_t sel_method);
+{{else}}
+{{/unless}}
+/**
+  * @}
+  */
+
+/* Private variables ---------------------------------------------------------*/
+/** @defgroup USBPD_DPM_USER_Private_Variables USBPD_DPM_USER Private Variables
+  * @{
+  */
+
+{{#unless @root.no_pd}}
+usbpd_dpm_user_settings_t usbpd_dpm_user_settings[USBPD_PORT_COUNT] =
+{
+  {
+    /* Data role swap support */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.user.data_role_swap}}
+    .pe_data_swap_support = USBPD_TRUE,
+{{else}}
+    .pe_data_swap_support = USBPD_FALSE,
+{{/if}}
+    /* VCONN swap support */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.user.vconn_swap}}
+    .pe_vconn_swap_support = USBPD_TRUE,
+{{else}}
+    .pe_vconn_swap_support = USBPD_FALSE,
+{{/if}}
+    /*  Support of DR Swap to DFP */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.user.data_role_swap_dfp}}
+    .pe_dr_swap_to_dfp_support = USBPD_TRUE,
+{{else}}
+    .pe_dr_swap_to_dfp_support = USBPD_FALSE,
+{{/if}}
+    /*  Support of DR Swap to UFP */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.user.data_role_swap_ufp}}
+    .pe_dr_swap_to_ufp_support = USBPD_TRUE,
+{{else}}
+    .pe_dr_swap_to_ufp_support = USBPD_FALSE,
+{{/if}}
+{{#if (or (eq usbpd_cxt.interfaces.port.[0].applicative.power_role 'Sink') (eq usbpd_cxt.interfaces.port.[0].applicative.power_role 'Dual Role'))}}
+    /*!< Requested Power by the sink board  */
+    .dpm_snk_requested_pwr =
+    {
+      /*!< Sink board Max operating current in mA units */
+      .operating_current_max_1ma_units = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_requested_pwr.operating_current_max_1ma_units}}U,
+      /*!< Sink board operating voltage in mV units */
+      .operating_voltage_1mv_units = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_requested_pwr.operating_voltage_1mv_units}}U,
+      /*!< Sink board Max operating voltage in mV units */
+      .operating_voltage_max_1mv_units = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_requested_pwr.operating_voltage_max_1mv_units}}U,
+      /*!< Sink board Min operating voltage in mV units */
+      .operating_voltage_min_1mv_units = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_requested_pwr.operating_voltage_min_1mv_units}}U,
+      /*!< Sink board operating power in mW units */
+      .operating_pwr_1mw_units = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_requested_pwr.operating_pwr_1mw_units}}U,
+      /*!< Sink board Max operating power in mW units */
+      .operating_pwr_max_1mw_units = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_requested_pwr.operating_pwr_max_1mw_units}}U,
+    },
+
+    /*!< SNK Extended Capability */
+    .dpm_snk_ext_capa =
+    {
+      /*!< Vendor ID (assigned by the USB-IF) */
+      .vid = USBPD_VID,
+      /*!< Product ID (assigned by the manufacturer) */
+      .pid = USBPD_PID,
+      /*!< Value provided by the USB-IF assigned to the product */
+      .xid = USBPD_XID,
+      /*!< Firmware version number */
+      .fw_revision = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.fw_revision}},
+      /*!< Hardware version number */
+      .hw_revision = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.hw_revision}},
+      /*!< SKEDV Version (not the specification Version) */
+      .skedb_version = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.skedb_version}},
+      /*!< Load Step */
+      .load_step = USBPD_SKEDB_LOADSTEP_{{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.load_step}},
+
+      /*!< Sink Load Characteristics */
+      .snk_load_charc.b =
+      {
+        /*!< Percent overload in 10% increments Values higher than 25 (11001b) are clipped to 250%. 0 is default */
+        .percent_overload = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.load_charc.percent_overload}}U,
+        /*!< Overload period in 20ms when bits 0-4 non-zero */
+        .overload_period = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.load_charc.overload_period}}U,
+        /*!< Duty Cycle in 5% increments when bits 0-4 are non-zero */
+        .duty_cycle = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.load_charc.duty_cycle}}U,
+        /*!< Can tolerate VBUS Voltage drop */
+        .vbus_voltage_drop = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.load_charc.vbus_voltage_drop}}U,
+      },
+
+      /*!< Compliance based on combination of @ref USBPD_SKEDB_COMPLIANCE */
+      .compliance = USBPD_SKEDB_COMPLIANCE_{{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.compliance}},
+      /*< Touch Temp */
+      .touch_temp = USBPD_SKEDB_TOUCHTEMP_{{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.touch_temp}},
+      /*!< Battery info */
+      .battery_info = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.battery_info}},
+      /*!< Sink modes based on combination of @ref USBPD_SKEDB_SINKMODES */
+      .snk_modes = USBPD_SKEDB_SINKMODES_{{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.sink_modes}},
+      /*!< The Minimum PDP required by the Sink to operate without consuming any power from its Battery(s)
+           if it have one */
+      .snk_min_pdp = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.sink_min_pdp}}U,
+      /*!< The PDP the Sink requires to operate normally. For Sinks with a Battery, it is the PDP rating of the
+           charger supplied with it or recommended for it. */
+      .snk_operational_pdp = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.sink_operational_pdp}}U,
+      /*!< The Maximum PDP the Sink can consume to operate an charge its Battery(s) if it have one */
+      .snk_max_pdp = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.sink_ext_capa.sink_max_pdp}}U,
+      /*!< The Minimum PDP required by the EPR Sink to operate without consuming any power from its battery(s)
+           if it have one */
+      .snk_epr_min_pdp = 0U,
+      /*!< The PDP the EPR Sink requires to operate normally. For sinks with a battery, it is the PDP Rating of
+           the charger supplied with it or recommended for it */
+      .snk_epr_operational_pdp = 0U,
+      /*!< The Maximum PDP the EPR Sink can consume to operate and charge its Battery(s) if it have one */
+      .snk_epr_max_pdp = 0U,
+    },
+{{/if}}
+{{#if (or (eq usbpd_cxt.interfaces.port.[0].applicative.power_role 'Source') (eq usbpd_cxt.interfaces.port.[0].applicative.power_role 'Dual Role'))}}
+    /*!< SRC Extended Capability */
+    .dpm_src_ext_capa =
+    {
+      /*!< Vendor ID (assigned by the USB-IF) */
+      .vid = USBPD_VID,
+      /*!< Product ID (assigned by the manufacturer) */
+      .pid = USBPD_PID,
+      /*!< Value provided by the USB-IF assigned to the product */
+      .xid = USBPD_XID,
+      /*!< Firmware version number */
+      .fw_revision = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.fw_revision}},
+      /*!< Hardware version number */
+      .hw_revision = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.hw_revision}},
+      /*!< Voltage Regulation */
+      .voltage_regulation = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.voltage_regulation}},
+      /*!< Holdup Time */
+      .holdup_time = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.holdup_time}},
+      /*!< Compliance */
+      .compliance = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.compliance}},
+      /*!< Touch Current */
+      .touch_current = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.touch_current}},
+      /*!< Peak Current1 */
+      .peak_current_1 = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.peak_current_1}},
+      /*!< Peak Current2 */
+      .peak_current_2 = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.peak_current_2}},
+      /*!< Peak Current3 */
+      .peak_current_3 = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.peak_current_3}},
+      /*!< Touch Temp */
+      .touch_temp = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.touch_temp}},
+      /*!< Source Inputs */
+      .source_inputs = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.source_inputs}},
+      /*!< Number of Batteries/Battery Slots */
+      .batteries_count = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.batteries_count}},
+      /*!< Source PDP  0..6: Source PDP rating 7: Reserved */
+      .source_pdp = {{usbpd_cxt.interfaces.port.[0].applicative.dpm.user.source_ext_capa.source_pdp}},
+      /*!< EPR Source PDP 0..7: EPR Source PDP Rating */
+      .source_epr_pdp = 0,
+    },
+{{/if}}
+    /*!< Manufacturer information used for the port */
+    .dpm_manu_info_port =
+    {
+      /*!< Vendor ID (assigned by the USB-IF) */
+      .vid = USBPD_VID,
+      /*!< Product ID (assigned by the manufacturer) */
+      .pid = USBPD_PID,
+      /*!< Vendor defined byte array */
+      .manu_string = "STMicroelectronics",
+    },
+  },
+{{#if (gt usbpd_cxt.interfaces.port.length 1)}}
+  {
+    /* Data role swap support */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.user.data_role_swap}}
+    .pe_data_swap_support = USBPD_TRUE,
+{{else}}
+    .pe_data_swap_support = USBPD_FALSE,
+{{/if}}
+    /* VCONN swap support */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.user.vconn_swap}}
+    .pe_vconn_swap_support = USBPD_TRUE,
+{{else}}
+    .pe_vconn_swap_support = USBPD_FALSE,
+{{/if}}
+    /*  Support of DR Swap to DFP */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.user.data_role_swap_dfp}}
+    .pe_dr_swap_to_dfp_support = USBPD_TRUE,
+{{else}}
+    .pe_dr_swap_to_dfp_support = USBPD_FALSE,
+{{/if}}
+    /*  Support of DR Swap to UFP */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.user.data_role_swap_ufp}}
+    .pe_dr_swap_to_ufp_support = USBPD_TRUE,
+{{else}}
+    .pe_dr_swap_to_ufp_support = USBPD_FALSE,
+{{/if}}
+{{#if (or (eq usbpd_cxt.interfaces.port.[1].applicative.power_role 'Sink') (eq usbpd_cxt.interfaces.port.[1].applicative.power_role 'Dual Role'))}}
+    /*!< Requested Power by the sink board  */
+    .dpm_snk_requested_pwr =
+    {
+      /*!< Sink board Max operating current in mA units */
+      .operating_current_max_1ma_units = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_requested_pwr.operating_current_max_1ma_units}}U,
+      /*!< Sink board operating voltage in mV units */
+      .operating_voltage_1mv_units = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_requested_pwr.operating_voltage_1mv_units}}U,
+      /*!< Sink board Max operating voltage in mV units */
+      .operating_voltage_max_1mv_units = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_requested_pwr.operating_voltage_max_1mv_units}}U,
+      /*!< Sink board Min operating voltage in mV units */
+      .operating_voltage_min_1mv_units = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_requested_pwr.operating_voltage_min_1mv_units}}U,
+      /*!< Sink board operating power in mW units */
+      .operating_pwr_1mw_units = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_requested_pwr.operating_pwr_1mw_units}}U,
+      /*!< Sink board Max operating power in mW units */
+      .operating_pwr_max_1mw_units = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_requested_pwr.operating_pwr_max_1mw_units}}U,
+    },
+
+    /*!< SNK Extended Capability */
+    .dpm_snk_ext_capa =
+    {
+      /*!< Vendor ID (assigned by the USB-IF) */
+      .vid = USBPD_VID,
+      /*!< Product ID (assigned by the manufacturer) */
+      .pid = USBPD_PID,
+      /*!< Value provided by the USB-IF assigned to the product */
+      .xid = USBPD_XID,
+      /*!< Firmware version number */
+      .fw_revision = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.fw_revision}},
+      /*!< Hardware version number */
+      .hw_revision = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.hw_revision}},
+      /*!< SKEDV Version (not the specification Version) */
+      .skedb_version = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.skedb_version}},
+      /*!< Load Step */
+      .load_step = USBPD_SKEDB_LOADSTEP_{{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.load_step}},
+
+      /*!< Sink Load Characteristics */
+      .snk_load_charc.b =
+      {
+        /*!< Percent overload in 10% increments Values higher than 25 (11001b) are clipped to 250%. 0 is default */
+        .percent_overload = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.load_charc.percent_overload}}U,
+        /*!< Overload period in 20ms when bits 0-4 non-zero */
+        .overload_period = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.load_charc.overload_period}}U,
+        /*!< Duty Cycle in 5% increments when bits 0-4 are non-zero */
+        .duty_cycle = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.load_charc.duty_cycle}}U,
+        /*!< Can tolerate VBUS Voltage drop */
+        .vbus_voltage_drop = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.load_charc.vbus_voltage_drop}}U,
+      },
+
+      /*!< Compliance based on combination of @ref USBPD_SKEDB_COMPLIANCE */
+      .compliance = USBPD_SKEDB_COMPLIANCE_{{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.compliance}},
+      /*< Touch Temp */
+      .touch_temp = USBPD_SKEDB_TOUCHTEMP_{{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.touch_temp}},
+      /*!< Battery info */
+      .battery_info = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.battery_info}},
+      /*!< Sink modes based on combination of @ref USBPD_SKEDB_SINKMODES */
+      .snk_modes = USBPD_SKEDB_SINKMODES_{{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.sink_modes}},
+      /*!< The Minimum PDP required by the Sink to operate without consuming any power from its Battery(s)
+           if it have one */
+      .snk_min_pdp = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.sink_min_pdp}}U,
+      /*!< The PDP the Sink requires to operate normally. For Sinks with a Battery, it is the PDP rating of the
+           charger supplied with it or recommended for it. */
+      .snk_operational_pdp = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.sink_operational_pdp}}U,
+      /*!< The Maximum PDP the Sink can consume to operate an charge its Battery(s) if it have one */
+      .snk_max_pdp = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.sink_ext_capa.sink_max_pdp}}U,
+      /*!< The Minimum PDP required by the EPR Sink to operate without consuming any power from its battery(s)
+           if it have one */
+      .snk_epr_min_pdp = 0U,
+      /*!< The PDP the EPR Sink requires to operate normally. For sinks with a battery, it is the PDP Rating of
+           the charger supplied with it or recommended for it */
+      .snk_epr_operational_pdp = 0U,
+      /*!< The Maximum PDP the EPR Sink can consume to operate and charge its Battery(s) if it have one */
+      .snk_epr_max_pdp = 0U,
+    },
+{{/if}}
+{{#if (or (eq usbpd_cxt.interfaces.port.[1].applicative.power_role 'Source') (eq usbpd_cxt.interfaces.port.[1].applicative.power_role 'Dual Role'))}}
+    /*!< SRC Extended Capability */
+    .dpm_src_ext_capa =
+    {
+      /*!< Vendor ID (assigned by the USB-IF) */
+      .vid = USBPD_VID,
+      /*!< Product ID (assigned by the manufacturer) */
+      .pid = USBPD_PID,
+      /*!< Value provided by the USB-IF assigned to the product */
+      .xid = USBPD_XID,
+      /*!< Firmware version number */
+      .fw_revision = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.fw_revision}},
+      /*!< Hardware version number */
+      .hw_revision = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.hw_revision}},
+      /*!< Voltage Regulation */
+      .voltage_regulation = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.voltage_regulation}},
+      /*!< Holdup Time */
+      .holdup_time = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.holdup_time}},
+      /*!< Compliance */
+      .compliance = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.compliance}},
+      /*!< Touch Current */
+      .touch_current = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.touch_current}},
+      /*!< Peak Current1 */
+      .peak_current_1 = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.peak_current_1}},
+      /*!< Peak Current2 */
+      .peak_current_2 = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.peak_current_2}},
+      /*!< Peak Current3 */
+      .peak_current_3 = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.peak_current_3}},
+      /*!< Touch Temp */
+      .touch_temp = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.touch_temp}},
+      /*!< Source Inputs */
+      .source_inputs = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.source_inputs}},
+      /*!< Number of Batteries/Battery Slots */
+      .batteries_count = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.batteries_count}},
+      /*!< Source PDP  0..6: Source PDP rating 7: Reserved */
+      .source_pdp = {{usbpd_cxt.interfaces.port.[1].applicative.dpm.user.source_ext_capa.source_pdp}},
+      /*!< EPR Source PDP 0..7: EPR Source PDP Rating */
+      .source_epr_pdp = 0,
+    },
+{{/if}}
+    /*!< Manufacturer information used for the port */
+    .dpm_manu_info_port =
+    {
+      /*!< Vendor ID (assigned by the USB-IF) */
+      .vid = USBPD_VID,
+      /*!< Product ID (assigned by the manufacturer) */
+      .pid = USBPD_PID,
+      /*!< Vendor defined byte array */
+      .manu_string = "STMicroelectronics",
+    },
+  }
+{{/if}}
+};
+{{else}}
+{{/unless}}
+/**
+  * @}
+  */
+
+/* Exported functions --------------------------------------------------------*/
+/** @addtogroup USBPD_DPM_USER_Exported_Functions USBPD_DPM_USER Exported Functions
+  * @{
+  */
+
+/** @defgroup USBPD_DPM_USER_Exported_Functions_GROUP1 USBPD DPM User Functions
+  * @{
+  */
+
+/**
+  * @brief  Initialize DPM User.
+  * @retval USBPD Status.
+  */
+usbpd_status_t USBPD_DPM_UserInit(void)
+{
+  /* Left for the user to implement */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.dpm.core.vendor_defined_messages true)}}
+  if (USBPD_VDM_UserInit(USBPD_PORT_0) != USBPD_OK)
+  {
+    return USBPD_ERROR;
+  }
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.dpm.core.vendor_defined_messages true)}}
+  if (USBPD_VDM_UserInit(USBPD_PORT_1) != USBPD_OK)
+  {
+    return USBPD_ERROR;
+  }
+{{/if}}
+  return USBPD_OK;
+}
+
+/**
+  * @brief  DeInitialize DPM User.
+  */
+void USBPD_DPM_UserDeInit(void)
+{
+  /* Left for the user to implement */
+}
+
+/**
+  * @brief  User processing time, it is recommended to avoid blocking task for long time.
+  * @param  argument DPM User event.
+  */
+void USBPD_DPM_UserExecute(void *argument)
+{
+  /* Left for the user to implement */
+  (void)argument;
+}
+
+/**
+  * @brief  User delay implementation which is OS dependent.
+  * @param  port_num The current port number.
+  * @param  time Time in ms.
+  */
+void USBPD_DPM_WaitForTime(uint8_t port_num, uint32_t time)
+{
+  usbpd_dpm_handle_t *h_dpm;
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+
+  if ((h_dpm == NULL) || (h_dpm->DPM_Delay == NULL))
+  {
+    return;
+  }
+
+  h_dpm->DPM_Delay(port_num, time);
+}
+
+/**
+  * @brief  Register DPM_Delay callback.
+  * @param  port_num The current port number.
+  * @param  p_callback Pointer to the DPM_Delay callback function.
+  * @retval USBPD_ERROR p_callback is NULL.
+  * @retval USBPD_OK    Register completed successfully.
+  */
+usbpd_status_t USBPD_DPM_User_RegisterDelayCallback(uint8_t port_num, void (*p_callback)(uint8_t, uint32_t))
+{
+  usbpd_dpm_handle_t *h_dpm;
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+
+  /* Check the parameters */
+  if ((h_dpm == NULL) ||(p_callback == NULL))
+  {
+    return USBPD_ERROR;
+  }
+
+  /* Set the callbacks */
+  h_dpm->DPM_Delay = p_callback;
+
+  return USBPD_OK;
+}
+
+/**
+  * @brief  UserCableDetection reporting events on a specified port from CAD layer.
+  * @param  port_num The current port number.
+  * @param  state CAD state.
+  */
+void USBPD_DPM_UserCableDetection(uint8_t port_num, usbpd_cad_event_t state)
+{
+#if defined(USBPD_DRP) || defined(USBPD_SRC)
+  usbpd_params_t *dpm_params;
+  usbpd_dpm_handle_t *h_dpm;
+
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+  dpm_params = USBPD_CAD_Get_DPM_Params(port_num);
+
+  if ((h_dpm == NULL) ||(dpm_params == NULL))
+  {
+    return;
+  }
+
+  switch (state)
+  {
+    case USBPD_CAD_EVENT_ATTACHED:
+    case USBPD_CAD_EVENT_ATTEMC:
+    {
+      h_dpm->flag_cable_pd_capable = USBPD_TRUE;
+      if (dpm_params->pe_power_role == USBPD_PORT_PWR_ROLE_SRC)
+      {
+        (void)USBPD_PWR_EnableVBUS(port_num);
+      }
+
+      h_dpm->flag_is_connected = 1U;
+      break;
+    }
+    case USBPD_CAD_EVENT_DETACHED:
+    case USBPD_CAD_EVENT_EMC:
+    default:
+    {
+      if (dpm_params->pe_power_role == USBPD_PORT_PWR_ROLE_SRC)
+      {
+        (void)USBPD_PWR_DisableVBUS(port_num);
+      }
+{{#unless @root.no_pd}}
+      if (USBPD_TRUE == dpm_params->vconn_status)
+      {
+        /* Switch Off Vconn */
+        (void)USBPD_DPM_PE_VconnPwr(port_num, USBPD_DISABLE);
+      }
+{{/unless}}
+      /* Save DPM_Delay callback */
+      void (*dpm_delay_callback)(uint8_t port_num, uint32_t time_ms);
+      if (h_dpm != NULL)
+      {
+        dpm_delay_callback = h_dpm->DPM_Delay;
+
+        /* Reset all values received from port partner */
+        (void)memset(h_dpm, 0, sizeof(*h_dpm));
+
+        /* Restore DPM_Delay callback */
+        h_dpm->DPM_Delay = dpm_delay_callback;
+      }
+      break;
+    }
+  }
+#else
+  USBPD_TRACE_INFO_PRINTF(port_num, "To be implemented: USBPD_DPM_UserCableDetection");
+#endif /* USBPD_DRP || USBPD_SRC */
+}
+{{#unless @root.no_pd}}
+/**
+  * @brief  function used to manage user timer.
+  * @param  port_num The current port number.
+  */
+void USBPD_DPM_UserTimerCounter(uint8_t port_num)
+{
+  /* Left for the user to implement */
+  (void)port_num;
+}
+{{else}}
+{{/unless}}
+/**
+  * @}
+  */
+
+/** @defgroup USBPD_DPM_USER_Exported_Functions_GROUP2 USBPD DPM User Exported Callbacks functions called by PE
+  * @{
+  */
+
+/**
+  * @brief  Callback function called by PE to inform DPM about PE event.
+  * @param  port_num The current port number.
+  * @param  event_val Notification event val.
+  */
+void USBPD_DPM_Notification(uint8_t port_num, usbpd_notify_event_t event_val)
+{
+  usbpd_params_t *dpm_params;
+{{#unless @root.no_pd}}
+  usbpd_dpm_handle_t *h_dpm;
+
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+
+  if(h_dpm == NULL)
+  {
+    return;
+  }
+
+{{/unless}}
+  dpm_params = USBPD_CAD_Get_DPM_Params(port_num);
+
+  if(dpm_params == NULL)
+  {
+    return;
+  }
+
+  switch (event_val)
+  {
+    /**
+      * Any other notification action can be managed by user by adding a new case.
+      * For example, if the user want to switch on/off a LED when an explicit contract
+      * is established, the user can add the following case:
+      *
+      * case USBPD_NOTIFY_POWER_EXPLICIT_CONTRACT:
+      *  -- Switch on the LED --
+      * break
+      */
+
+    /* USB related notifications */
+    case USBPD_NOTIFY_USBSTACK_START:
+    {
+      if (USBPD_PORTDATAROLE_DFP == dpm_params->pe_data_role)
+      {
+{{#if (eq usbpd_cxt.core.basic.core.usb_data_support true)}}
+        USBPD_USBIF_Start_DFP(port_num);
+{{/if}}
+      }
+      else
+      {
+{{#if (eq usbpd_cxt.core.basic.core.usb_data_support true)}}
+        USBPD_USBIF_Start_UFP(port_num);
+{{/if}}
+      }
+      break;
+    }
+
+    case USBPD_NOTIFY_USBSTACK_STOP:
+    {
+      if (USBPD_PORTDATAROLE_DFP == dpm_params->pe_data_role)
+      {
+{{#if (eq usbpd_cxt.core.basic.core.usb_data_support true)}}
+        USBPD_USBIF_Stop_DFP(port_num);
+{{/if}}
+      }
+      else
+      {
+{{#if (eq usbpd_cxt.core.basic.core.usb_data_support true)}}
+        USBPD_USBIF_Stop_UFP(port_num);
+{{/if}}
+      }
+      break;
+    }
+
+    case USBPD_NOTIFY_DATAROLESWAP_DFP:
+{{#if (eq usbpd_cxt.core.basic.core.usb_data_support true)}}
+      USBPD_USBIF_Swap_DFP(port_num);
+{{/if}}
+      break;
+
+    case USBPD_NOTIFY_DATAROLESWAP_UFP:
+{{#if (eq usbpd_cxt.core.basic.core.usb_data_support true)}}
+      USBPD_USBIF_Swap_UFP(port_num);
+{{/if}}
+      break;
+
+    case USBPD_NOTIFY_TAMETIMEOUT:
+{{#if (eq usbpd_cxt.core.basic.core.usb_data_support true)}}
+      USBPD_USBIF_TAME_Timeout(port_num);
+{{/if}}
+      break;
+
+    case USBPD_NOTIFY_TAMESTOP:
+{{#if (eq usbpd_cxt.core.basic.core.usb_data_support true)}}
+      USBPD_USBIF_TAME_Stop(port_num);
+{{/if}}
+      break;
+{{#unless @root.no_pd}}
+    case USBPD_NOTIFY_REQUEST_ACCEPTED:
+    {
+      /* Update the VBUS threshold according the new request */
+      USBPD_PWR_UpdateVbusThreshold(port_num);
+
+      /* Update DPM_RDOPosition only if current role is SNK */
+      if (USBPD_PORT_PWR_ROLE_SNK == dpm_params->pe_power_role)
+      {
+        usbpd_rdo_snk_t rdo;
+        rdo.d32                            = h_dpm->rdo_msg;
+        h_dpm->rdo_position = rdo.rdo_generic.object_position;
+      }
+      break;
+    }
+
+    case USBPD_NOTIFY_POWER_SWAP_TO_SNK_DONE:
+#if defined(USBPD_SNK) || defined(USBPD_DRP)
+      USBPD_PWR_ResetVbusThreshold(port_num);
+#endif /* USBPD_SNK || USBPD_DRP */
+      break;
+
+    case USBPD_NOTIFY_HARDRESET_RX:
+#if defined(USBPD_SNK) || defined(USBPD_DRP)
+      USBPD_PWR_ResetVbusThreshold(port_num);
+#endif /* USBPD_SNK || USBPD_DRP */
+      break;
+
+    case USBPD_NOTIFY_HARDRESET_TX:
+#if defined(USBPD_SNK) || defined(USBPD_DRP)
+      USBPD_PWR_ResetVbusThreshold(port_num);
+#endif /* USBPD_SNK || USBPD_DRP */
+      break;
+
+    case USBPD_NOTIFY_CABLERESET_REQUESTED:
+    {
+      /* CABLE_RESET is requested by the PE but port is not in the correct configuration */
+      /* Only a DFP can generate Cable Reset Signaling. A DFP must only generate Cable
+         Reset Signaling within an Explicit Contract. */
+      if ((USBPD_PORTDATAROLE_DFP == dpm_params->pe_data_role)
+          && (USBPD_FALSE == dpm_params->vconn_status))
+      {
+        /* DFP is not VConn source. Request a VConn Swap */
+        (void)USBPD_DPM_RequestVconnSwap(port_num);
+        h_dpm->flag_cable_reset_ongoing = USBPD_TRUE;
+      }
+      break;
+    }
+
+    case USBPD_NOTIFY_VCONN_SWAP_COMPLETE:
+    {
+      /* VConn Swap received in DFP. Now DFP is VConn Source --> can send the CABLE_RESET  */
+      if ((USBPD_TRUE == h_dpm->flag_cable_reset_ongoing)
+          && (USBPD_TRUE == dpm_params->vconn_status))
+      {
+        /* DFP is now VConn source. Cable Reset request could be processed */
+        (void)USBPD_DPM_RequestCableReset(port_num);
+        h_dpm->flag_cable_reset_ongoing = USBPD_FALSE;
+      }
+      break;
+    }
+{{else}}
+{{/unless}}
+    default:
+      USBPD_TRACE_INFO_PRINTF(port_num, "To be implemented: USBPD_DPM_Notification() with event_val = %d", event_val);
+      break;
+  }
+}
+{{#unless @root.no_pd}}
+/**
+  * @brief  Callback function called by PE layer when HardReset message received from PRL.
+  * @param  port_num The current port number.
+  * @param  current_role the current role.
+  * @param  status status on hard reset event.
+  */
+void USBPD_DPM_HardReset(uint8_t port_num, usbpd_port_pwr_role_t current_role, usbpd_hard_reset_status_t status)
+{
+#if defined(USBPD_DRP) || defined(USBPD_SRC)
+  usbpd_params_t *dpm_params;
+  usbpd_dpm_handle_t *h_dpm;
+
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+  dpm_params = USBPD_PE_Get_DPM_Params(port_num);
+
+  if((dpm_params == NULL) || (h_dpm == NULL))
+  {
+    return;
+  }
+
+  h_dpm->flag_cable_reset_ongoing = USBPD_FALSE;
+
+  switch (status)
+  {
+    case USBPD_HR_STATUS_WAIT_VBUS_VSAFE0V:
+      if (USBPD_PORT_PWR_ROLE_SRC == current_role)
+      {
+        /* Reset the power supply */
+        (void)USBPD_PWR_DisableVBUS(port_num);
+      }
+      break;
+
+    case USBPD_HR_STATUS_WAIT_VBUS_VSAFE5V:
+      if (current_role == USBPD_PORT_PWR_ROLE_SRC)
+      {
+        /* When VConn is supported, the Hard Reset must cause the Port with the Rp resistor asserted to supply VConn */
+        if (USBPD_TRUE == h_dpm->flag_cable_pd_capable)
+        {
+          dpm_params->vconn_status = USBPD_TRUE;
+        }
+        /* Power on the power supply */
+        /* Enable the output */
+        (void)USBPD_PWR_EnableVBUS(port_num);
+        /* Delay for the output to be ready */
+        USBPD_DPM_WaitForTime(port_num, 20U);
+      }
+      break;
+
+    default:
+      break;
+  }
+#else
+  USBPD_TRACE_INFO_PRINTF(port_num, "To be implemented: USBPD_DPM_HardReset");
+#endif /* USBPD_DRP || USBPD_SRC */
+}
+
+/**
+  * @brief  Request the DPM to setup the new power level.
+  * @param  port_num The current port number.
+  * @retval USBPD status.
+  */
+usbpd_status_t USBPD_DPM_SetupNewPower(uint8_t port_num)
+{
+#if defined(USBPD_DRP) || defined(USBPD_SRC)
+  return USBPD_PWR_SetProfile(port_num);
+#else
+  (void)port_num;
+  return USBPD_REJECT;
+#endif /* USBPD_DRP || USBPD_SRC */
+}
+
+/**
+  * @brief  Evaluate the swap request from PE.
+  * @param  port_num The current port number.
+  * @retval USBPD status.
+  */
+usbpd_status_t USBPD_DPM_EvaluatePowerRoleSwap(uint8_t port_num)
+{
+  (void)port_num;
+#if defined(USBPD_DRP)
+  return USBPD_ACCEPT;
+#else
+  return USBPD_REJECT;
+#endif /* USBPD_DRP */
+}
+
+/**
+  * @brief  DPM callback to allow PE to retrieve information from DPM/PWR.
+  * @param  port_num The current port number.
+  * @param  data_id Type of data to be updated in DPM based on @ref usbpd_core_datainfo_type_t.
+  * @param  ptr Pointer on address where DPM data must be written (u8 pointer).
+  * @param  size Pointer on nb of u8 written by DPM.
+  */
+void USBPD_DPM_GetDataInfo(uint8_t port_num, usbpd_core_datainfo_type_t data_id, uint8_t *ptr, uint32_t *size)
+{
+  usbpd_dpm_handle_t *h_dpm;
+
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+
+  if(h_dpm == NULL)
+  {
+    return;
+  }
+
+  /* Check type of information targeted by request */
+  switch (data_id)
+  {
+    /* Case Port Source PDO Data information: */
+    /* Case Port SINK PDO Data information: */
+    case USBPD_CORE_DATAINFO_DATATYPE_SRC_PDO:
+    case USBPD_CORE_DATAINFO_DATATYPE_SNK_PDO:
+      USBPD_PWR_GetPortPDOs(port_num, data_id, ptr, size);
+      *size *= 4U;
+      break;
+    case USBPD_CORE_DATAINFO_DATATYPE_REQ_VOLTAGE:       /*!< Get voltage value requested for BIST tests, expect 5V*/
+      *size = 4U;
+      (void)memcpy((uint8_t *)ptr, (uint8_t *)&h_dpm->requested_voltage_1mv_units, *size);
+      break;
+    case USBPD_CORE_DATAINFO_REVISION:
+    {
+      *size = sizeof(usbpd_revision_data_object_t);
+      usbpd_revision_data_object_t rev =
+      {
+        /* Hardcoded values, user must use a global usbpd_revision_data_object_t variable */
+        .b.revision_major = USBPD_REV_MAJOR,         /*!< Major revision */
+        .b.revision_minor = USBPD_REV_MINOR,         /*!< Minor revision */
+        .b.version_major  = USBPD_VERSION_MAJOR,     /*!< Major version  */
+        .b.version_minor  = USBPD_VERSION_MINOR      /*!< Minor version  */
+      };
+
+      (void)memcpy((uint8_t *)ptr, &rev, *size);
+      break;
+    }
+    case USBPD_CORE_DATAINFO_SNK_EXTENDED_CAPA:
+    {
+      *size = sizeof(usbpd_skedb_t);
+      (void)memcpy((uint8_t *)ptr, (uint8_t *)&usbpd_dpm_user_settings[port_num].dpm_snk_ext_capa, *size);
+      break;
+    }
+    case USBPD_CORE_DATAINFO_PPS_STATUS:
+    {
+      /* Get current drawn by sink */
+      usbpd_ppsdb_t pps_status = {0U};
+      *size = 4U;
+      (void)memcpy((uint8_t *)ptr, (uint8_t *)&pps_status.d32, *size);
+      break;
+    }
+
+    default:
+      *size = 0U;
+      USBPD_TRACE_INFO_PRINTF(port_num, "To be implemented: USBPD_DPM_GetDataInfo: data id = 0x%x", data_id);
+      break;
+  }
+}
+
+/**
+  * @brief  DPM callback to allow PE to update information in DPM/PWR.
+  * @param  port_num The current port number.
+  * @param  data_id  Type of data to be updated in DPM based on @ref usbpd_core_datainfo_type_t
+  * @param  ptr     Pointer on the data
+  * @param  size    Nb of bytes to be updated in DPM
+  */
+void USBPD_DPM_SetDataInfo(uint8_t port_num, usbpd_core_datainfo_type_t data_id, uint8_t *ptr, uint32_t size)
+{
+  usbpd_dpm_handle_t *h_dpm;
+
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+
+  if(h_dpm == NULL)
+  {
+    return;
+  }
+
+  /* Check type of information targeted by request */
+  switch (data_id)
+  {
+    /* Case Received Request PDO Data information: */
+    case USBPD_CORE_DATAINFO_DATATYPE_RDO_POSITION:
+      if (size == 4U)
+      {
+        uint8_t *temp;
+        temp = (uint8_t *)&h_dpm->rdo_position;
+        (void)memcpy(temp, ptr, size);
+        h_dpm->rdo_position_previous = *ptr;
+        temp = (uint8_t *)&h_dpm->rdo_position_previous;
+        (void)memcpy(temp, ptr, size);
+      }
+      break;
+
+    /* Case Received Sink PDO values Data information: */
+    case USBPD_CORE_DATAINFO_DATATYPE_RCV_SNK_PDO:
+      if (size <= (USBPD_MAX_NB_PDO * 4U))
+      {
+        uint8_t *rdo;
+        h_dpm->rcv_snk_pdo_count = (size / 4U);
+        /* Copy PDO data in DPM Handle field */
+        for (uint32_t index = 0U; index < (size / 4U); index++)
+        {
+          rdo = (uint8_t *)&h_dpm->p_list_rcv_snk_pdo[index];
+          (void)memcpy(rdo, (ptr + (index * 4U)), (4U * sizeof(uint8_t)));
+        }
+      }
+      break;
+
+    case USBPD_CORE_DATAINFO_DATATYPE_RCV_REQ_PDO:  /*!< Storage of Received Sink Request PDO value */
+      if (size == 4U)
+      {
+        (void)memcpy((uint8_t *)&h_dpm->rcv_request_do_msg,  ptr, 4U);
+      }
+      break;
+
+    /* Case Received Source PDO values Data information: */
+    case USBPD_CORE_DATAINFO_DATATYPE_RCV_SRC_PDO:
+      if (size <= (USBPD_MAX_NB_PDO * 4U))
+      {
+        uint8_t *rdo;
+        h_dpm->rcv_src_pdo_count = (size / 4U);
+        /* Copy PDO data in DPM Handle field */
+        for (uint32_t index = 0U; index < (size / 4U); index++)
+        {
+          rdo = (uint8_t *)&h_dpm->p_list_rcv_src_pdo[index];
+          (void)memcpy(rdo, (ptr + (index * 4U)), (4U * sizeof(uint8_t)));
+        }
+      }
+      break;
+
+    case USBPD_CORE_DATAINFO_PPS_STATUS:
+    {
+      uint8_t  *ext_capa;
+      ext_capa = (uint8_t *)&h_dpm->rcv_pps_status;
+      (void)memcpy(ext_capa, ptr, size);
+      break;
+    }
+
+    case USBPD_CORE_DATAINFO_REVISION:
+    {
+      /* Does nothing: User have to implement a global revision variable */
+      usbpd_revision_data_object_t rev = {0U};
+      (void)memcpy((uint8_t *)&rev, ptr, sizeof(usbpd_revision_data_object_t));
+      break;
+    }
+
+#if defined(USBPDCORE_SNK_CAPA_EXT)
+    case USBPD_CORE_DATAINFO_SNK_EXTENDED_CAPA:
+    {
+      uint8_t  *_snk_ext_capa;
+      _snk_ext_capa = (uint8_t *)&h_dpm->rcv_snk_extended_capa;
+      (void)memcpy(_snk_ext_capa, ptr, size);
+      break;
+    }
+#endif /* USBPDCORE_SNK_CAPA_EXT */
+
+#if defined(USBPDCORE_BATTERY)
+    case USBPD_CORE_DATAINFO_BATTERY_STATUS:
+    {
+      uint8_t *battery_info;
+      battery_info = (uint8_t *)&h_dpm->battery_status.d32;
+      memcpy(battery_info, ptr, size);
+      break;
+    }
+#endif /* USBPDCORE_BATTERY */
+
+    default:
+      USBPD_TRACE_INFO_PRINTF(port_num, "To be implemented: USBPD_DPM_SetDataInfo: data id = 0x%x", data_id);
+      break;
+  }
+
+}
+
+/**
+  * @brief  Evaluate received Request Message from Sink port.
+  * @param  port_num The current port number.
+  * @param  p_pwr_object Pointer on the power data object.
+  * @retval USBPD status.
+  */
+usbpd_status_t USBPD_DPM_EvaluateRequest(uint8_t port_num, usbpd_core_pdo_type_t *p_pwr_object)
+{
+  usbpd_status_t ret = USBPD_REJECT;
+#if defined(USBPD_DRP) || defined(USBPD_SRC)
+  usbpd_pdo_t pdo;
+  usbpd_rdo_snk_t rdo;
+  usbpd_dpm_handle_t *h_dpm;
+
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+
+  if(h_dpm == NULL)
+  {
+    return ret;
+  }
+
+  /* read the request value received */
+  rdo.d32 = h_dpm->rcv_request_do_msg;
+
+  /* Search PDO in Port Source PDO list, that corresponds to Position provided in Request RDO */
+  if (USBPD_PWR_SearchRequestedPDO(port_num,  rdo.rdo_generic.object_position, &pdo.d32) == USBPD_OK)
+  {
+    /* Evaluate the request */
+    if ((usbpd_core_pdo_type_t)pdo.pdo_generic.pdo_type == USBPD_CORE_PDO_TYPE_FIXED)
+    {
+      if ((rdo.rdo_fixed_variable.operating_current_10ma_units > pdo.pdo_src_fixed.current_max_10ma_units)
+          || ((rdo.rdo_fixed_variable.operating_current_max_10ma_units > pdo.pdo_src_fixed.current_max_10ma_units)
+              && (rdo.rdo_fixed_variable.capability_mismatch == 0U)))
+      {
+        /* Sink requests too much maximum operating current */
+        /* USBPD_DPM_EvaluateRequest: Sink requests too much maximum operating current */
+        ret =  USBPD_REJECT;
+      }
+      else
+      {
+        /* Save the power object */
+        *p_pwr_object = (usbpd_core_pdo_type_t)pdo.pdo_generic.pdo_type;
+
+        /* Set RDO position and requested voltage in DPM port structure */
+        h_dpm->requested_voltage_1mv_units = pdo.pdo_src_fixed.voltage_50mv_units * 50U;
+        h_dpm->rdo_position_previous = h_dpm->rdo_position;
+        h_dpm->rdo_position = rdo.rdo_generic.object_position;
+        ret = USBPD_ACCEPT;
+      }
+    }
+  }
+#endif /* USBPD_DRP || USBPD_SRC */
+  return ret;
+}
+
+/**
+  * @brief  Evaluate received Capabilities Message from Source port and prepare the request message.
+  * @param  port_num The current port number.
+  * @param  p_request_data Pointer on selected request data object.
+  * @param  p_pwr_object_type Pointer on the power data object.
+  */
+void USBPD_DPM_SNK_EvaluateCapabilities(uint8_t port_num, uint32_t *p_request_data,
+                                        usbpd_core_pdo_type_t *p_pwr_object_type)
+{
+
+  usbpd_pdo_t  fixed_pdo;
+  usbpd_rdo_snk_t rdo;
+  usbpd_dpm_handle_t *pdhandle = USBPD_PWR_Get_DPM_Handler(port_num);
+  usbpd_dpm_user_settings_t *puser = (usbpd_dpm_user_settings_t *)&usbpd_dpm_user_settings[port_num];
+  usbpd_dpm_snk_pwr_request_details_t snkpowerrequestdetails;
+  uint32_t pdoindex;
+  uint32_t size;
+  uint32_t snkpdolist[USBPD_MAX_NB_PDO];
+  usbpd_pdo_t snk_fixed_pdo;
+
+  if((puser == NULL) || (pdhandle == NULL))
+  {
+    return;
+  }
+
+  snkpowerrequestdetails.requested_voltage_1mv_units = 0U;
+  snkpowerrequestdetails.operating_current_1ma_units = 0U;
+  /* USBPD_DPM_EvaluateCapabilities: Port Partner Requests Max Voltage */
+
+  /* Find the Pdo index for the requested voltage */
+  pdoindex = DPM_FindVoltageIndex(port_num, &snkpowerrequestdetails, pdhandle->usbpd_dpm_pdo_select_method);
+
+  /* Initialize RDO */
+  rdo.d32 = 0U;
+
+  /* If no valid SNK PDO or if no SRC PDO match found (index>=nb of valid received SRC PDOs or
+     function returned DPM_NO_SRC_PDO_FOUND*/
+  if (pdoindex >= pdhandle->rcv_src_pdo_count)
+  {
+    USBPD_TRACE_WARNING_PRINTF(port_num, "%s: Could not find desired voltage", __func__);
+    fixed_pdo.d32 = pdhandle->p_list_rcv_src_pdo[0U];
+    /* Read SNK PDO list for retrieving useful data to fill in RDO */
+    USBPD_PWR_GetPortPDOs(port_num, USBPD_CORE_DATAINFO_DATATYPE_SNK_PDO, (uint8_t *)&snkpdolist[0U], &size);
+    /* Store value of 1st SNK PDO (Fixed) in local variable */
+    snk_fixed_pdo.d32 = snkpdolist[0U];
+    rdo.rdo_fixed_variable.object_position = 1U;
+    rdo.rdo_fixed_variable.operating_current_10ma_units  = fixed_pdo.pdo_src_fixed.current_max_10ma_units;
+    rdo.rdo_fixed_variable.operating_current_max_10ma_units = fixed_pdo.pdo_src_fixed.current_max_10ma_units;
+    rdo.rdo_fixed_variable.capability_mismatch = 1U;
+    rdo.rdo_fixed_variable.usb_com_capable = snk_fixed_pdo.pdo_snk_fixed.usb_com_capable;
+    pdhandle->requested_current_1ma_units = puser->dpm_snk_requested_pwr.operating_current_max_1ma_units;
+
+    pdhandle->rdo_msg = rdo.d32;
+    *p_pwr_object_type = USBPD_CORE_PDO_TYPE_FIXED;
+    *p_request_data     = rdo.d32;
+    pdhandle->requested_voltage_1mv_units = USBPD_PWR_HW_IF_VBUS_5V;
+    return;
+  }
+  DPM_SNK_BuildRDOfromSelectedPDO(port_num, (uint8_t)pdoindex, &snkpowerrequestdetails, &rdo, p_pwr_object_type);
+
+  *p_request_data = pdhandle->rdo_msg;
+}
+
+/**
+  * @brief  Power role swap status update.
+  * @param  port_num The current port number.
+  * @param  current_role the current role.
+  * @param  status status on power role swap event.
+  */
+void USBPD_DPM_PowerRoleSwap(uint8_t port_num, usbpd_port_pwr_role_t current_role, usbpd_prs_status_t status)
+{
+#if defined(USBPD_DRP)
+  usbpd_params_t *dpm_params;
+
+  dpm_params = USBPD_PE_Get_DPM_Params(port_num);
+
+  if(dpm_params == NULL)
+  {
+    return;
+  }
+
+  switch (status)
+  {
+    case USBPD_PRS_STATUS_VBUS_OFF:
+      if (current_role == USBPD_PORT_PWR_ROLE_SRC)
+      {
+        /* Avoid VConn disable during HR procedure */
+        uint32_t vconnstate = dpm_params->vconn_status;
+        dpm_params->vconn_status = USBPD_FALSE;
+
+        /* In case of power role swap keep VConn On */
+        (void)USBPD_PWR_DisableVBUS(port_num);
+
+        /* Restore vconn status */
+        dpm_params->vconn_status = vconnstate;
+      }
+      break;
+
+    case USBPD_PRS_STATUS_SRC_RP2RD:
+      USBPD_CAD_AssertRd(port_num);
+      USBPD_DPM_WaitForTime(port_num, 5U);
+      break;
+
+    case USBPD_PRS_STATUS_SNK_RD2RP:
+      USBPD_CAD_AssertRp(port_num);
+      break;
+
+    case USBPD_PRS_STATUS_VBUS_ON:
+      (void)USBPD_PWR_EnableVBUS(port_num);
+      if (USBPD_PORT_PWR_ROLE_SRC == current_role)
+      {
+        USBPD_DPM_WaitForTime(port_num, 20U);
+      }
+      break;
+
+    default:
+      break;
+  }
+#endif /* USBPD_DRP */
+}
+
+/**
+  * @brief  Callback to be used by PE to evaluate a Vconn swap.
+  * @param  port_num The current port number.
+  * @retval USBPD_ACCEPT, USBPD_REJECT, USBPD_WAIT.
+  */
+usbpd_status_t USBPD_DPM_EvaluateVconnSwap(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_REJECT;
+  if (USBPD_TRUE == usbpd_dpm_user_settings[port_num].pe_vconn_swap_support)
+  {
+    status = USBPD_ACCEPT;
+  }
+
+  return status;
+}
+
+/**
+  * @brief  Callback to be used by PE to manage VConn.
+  * @param  port_num The current port number.
+  * @param  state Enable or Disable VConn on CC lines.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_DPM_PE_VconnPwr(uint8_t port_num, usbpd_functional_status_t state)
+{
+  usbpd_status_t status = USBPD_ERROR;
+  usbpd_params_t *dpm_params;
+  usbpd_dpm_handle_t *h_dpm;
+
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+  dpm_params = USBPD_PE_Get_DPM_Params(port_num);
+
+  if((dpm_params == NULL) || (h_dpm == NULL))
+  {
+    return USBPD_ERROR;
+  }
+
+  if (CCNONE != (usbpd_cc_line_t)dpm_params->vconn_cc)
+  {
+    if (USBPD_ENABLE == state)
+    {
+      /* In case of VConn Swap SRC -> SNK. Keep information that CABLE is EMC */
+      h_dpm->flag_cable_pd_capable = USBPD_TRUE;
+      status = USBPD_PWR_EnableVConn(port_num, (usbpd_cc_line_t)dpm_params->vconn_cc);
+    }
+    else
+    {
+      status = USBPD_PWR_DisableVConn(port_num, (usbpd_cc_line_t)dpm_params->vconn_cc);
+    }
+  }
+
+  return status;
+}
+
+/**
+  * @brief  DPM callback to allow PE to forward extended message information.
+  * @param  port_num The current port number.
+  * @param  msg_type Type of message to be handled in DPM
+  *         This parameter can be one of the following values:
+  *           @arg @ref USBPD_EXT_SECURITY_REQUEST Security Request extended message
+  *           @arg @ref USBPD_EXT_SECURITY_RESPONSE Security Response extended message
+  * @param  p_data   Pointer on address Extended Message data could be read (u8 pointer).
+  * @param  data_size  Nb of u8 that compose Extended message.
+  */
+void USBPD_DPM_ExtendedMessageReceived(uint8_t port_num, usbpd_extended_msg_t msg_type, uint8_t *p_data,
+                                       uint16_t data_size)
+{
+  /* Left for the user to implement */
+}
+
+/**
+  * @brief  DPM callback to allow PE to enter ERROR_RECOVERY state.
+  * @param  port_num The current port number.
+  */
+void USBPD_DPM_EnterErrorRecovery(uint8_t port_num)
+{
+  usbpd_params_t *dpm_params;
+
+  dpm_params = USBPD_PE_Get_DPM_Params(port_num);
+
+  if(dpm_params == NULL)
+  {
+    return;
+  }
+
+  if (USBPD_TRUE == dpm_params->vconn_status)
+  {
+    /* Switch Off Vconn */
+    (void)USBPD_DPM_PE_VconnPwr(port_num, USBPD_DISABLE);
+  }
+
+  /* Inform CAD to enter recovery mode */
+  USBPD_CAD_EnterErrorRecovery(port_num);
+}
+
+/**
+  * @brief  Callback used to ask application the reply status for a data_role_swap request.
+  * @param  port_num The current port number.
+  * @note   if the callback is not set (ie NULL) the stack will automatically reject the request.
+  * @retval Returned values are:
+            @ref USBPD_ACCEPT if DRS can be accepted
+            @ref USBPD_REJECT if DRS is not accepted in one data role (DFP or UFP) or in PD2.0 config
+            @ref USBPD_NOTSUPPORTED if DRS is not supported at all by the application (in both data roles) - P3.0 only
+  */
+usbpd_status_t USBPD_DPM_EvaluateDataRoleSwap(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_REJECT;
+  usbpd_params_t *dpm_params;
+
+  dpm_params = USBPD_PE_Get_DPM_Params(port_num);
+
+  if(dpm_params == NULL)
+  {
+    return status;
+  }
+
+  /* Sent NOT_SUPPORTED if DRS is not supported at all by the application (in both data roles) - P3.0 only */
+  if ((USBPD_FALSE == usbpd_dpm_user_settings[port_num].pe_data_swap_support)
+      || ((USBPD_FALSE == usbpd_dpm_user_settings[port_num].pe_dr_swap_to_dfp_support)
+          && (USBPD_FALSE == usbpd_dpm_user_settings[port_num].pe_dr_swap_to_ufp_support)))
+  {
+    status = USBPD_NOTSUPPORTED;
+  }
+  else
+  {
+    /* ACCEPT DRS if at least supported by 1 data role */
+    if (((USBPD_TRUE == usbpd_dpm_user_settings[port_num].pe_dr_swap_to_dfp_support)
+         && (USBPD_PORTDATAROLE_UFP == dpm_params->pe_data_role))
+        || ((USBPD_TRUE == usbpd_dpm_user_settings[port_num].pe_dr_swap_to_ufp_support)
+            && (USBPD_PORTDATAROLE_DFP == dpm_params->pe_data_role)))
+    {
+      status = USBPD_ACCEPT;
+    }
+  }
+  return status;
+}
+
+/**
+  * @brief  Callback to be used by PE to check is VBUS is ready or present.
+  * @param  port_num The current port number.
+  * @param  vsafe   Vsafe status based on @ref usbpd_vsafe_status_t.
+  * @retval USBPD_DISABLE or USBPD_ENABLE.
+  */
+usbpd_functional_status_t USBPD_DPM_IsPowerReady(uint8_t port_num, usbpd_vsafe_status_t vsafe)
+{
+  return ((USBPD_OK == USBPD_PWR_IsSupplyReady(port_num, vsafe)) ? USBPD_ENABLE : USBPD_DISABLE);
+}
+
+/**
+  * @}
+  */
+
+/** @defgroup USBPD_USER_EXPORTED_FUNCTIONS_GROUP3 USBPD USER Functions PD messages requests
+  * @{
+  */
+
+/**
+  * @brief  Request the PE to send a hard reset.
+  * @param  port_num The current port number.
+  * @retval USBPD Status.
+  */
+usbpd_status_t USBPD_DPM_RequestHardReset(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_HardReset(port_num);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "HARD RESET not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a cable reset.
+  * @param  port_num The current port number.
+  * @note   Only a DFP must generate Cable Reset Signaling. A DFP must only generate Cable Reset Signaling
+  *         within an Explicit Contract. The DFP has to be supplying VConn prior to a Cable Reset.
+  * @retval USBPD Status.
+  */
+usbpd_status_t USBPD_DPM_RequestCableReset(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CableReset(port_num);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "CABLE RESET not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a GOTOMIN message.
+  * @param  port_num The current port number.
+  * @retval USBPD Status.
+  */
+usbpd_status_t USBPD_DPM_RequestGotoMin(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_GOTOMIN, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GOTOMIN not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a PING message.
+  * @param  port_num The current port number.
+  * @note   In USB-PD stack, only ping management for P3.0 is implemented.
+  *         If PD2.0 is used, PING timer needs To be implemented on user side.
+  * @retval USBPD Status.
+  */
+usbpd_status_t USBPD_DPM_RequestPing(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_PING, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "PING not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a request message.
+  * @param  port_num     The current port number
+  * @param  index_src_pdo Index on the selected SRC PDO (value between 1 to 7)
+  * @param  voltage_requested Requested voltage (in MV and use mainly for APDO)
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestMessageRequest(uint8_t port_num, uint8_t index_src_pdo, uint16_t voltage_requested)
+{
+  usbpd_status_t status = USBPD_ERROR;
+  uint32_t voltage;
+  uint32_t allowablepower;
+  usbpd_rdo_snk_t rdo;
+  usbpd_pdo_t  pdo;
+  usbpd_core_pdo_type_t pdo_object;
+  const usbpd_dpm_user_settings_t *puser = (usbpd_dpm_user_settings_t *)&usbpd_dpm_user_settings[port_num];
+  usbpd_dpm_snk_pwr_request_details_t request_details;
+  usbpd_dpm_handle_t *h_dpm;
+
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+
+  if((puser == NULL) || (h_dpm == NULL))
+  {
+    return status;
+  }
+
+  rdo.d32 = 0U;
+  /* selected SRC PDO */
+  pdo.d32 = h_dpm->p_list_rcv_src_pdo[(index_src_pdo - 1U)];
+  voltage = voltage_requested;
+  allowablepower = (puser->dpm_snk_requested_pwr.operating_current_max_1ma_units * voltage_requested) / 1000U;
+  if (USBPD_TRUE == USBPD_DPM_SNK_EvaluateMatchWithSRCPDO(port_num, pdo.d32, &voltage, &allowablepower))
+  {
+    /* Check that voltage has been correctly selected */
+    if (voltage_requested == voltage)
+    {
+      request_details.requested_voltage_1mv_units    = voltage_requested;
+      request_details.operating_current_1ma_units    = (1000U * allowablepower) / voltage_requested;
+      request_details.operating_current_max_1ma_units = puser->dpm_snk_requested_pwr.operating_current_max_1ma_units;
+      request_details.operating_pwr_max_1mw_units   = puser->dpm_snk_requested_pwr.operating_pwr_max_1mw_units;
+      request_details.operating_pwr_1mw_units      = puser->dpm_snk_requested_pwr.operating_pwr_1mw_units;
+      DPM_SNK_BuildRDOfromSelectedPDO(port_num, (index_src_pdo - 1U), &request_details, &rdo, &pdo_object);
+      status = USBPD_PE_Send_Request(port_num, rdo.d32, pdo_object);
+    }
+  }
+  else
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "REQUEST not accepted by the stack");
+  }
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "REQUEST not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a GET_SRC_CAPA message.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetSourceCapability(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_GET_SRC_CAP, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_SRC_CAPA not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a GET_SNK_CAPA message.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetSinkCapability(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_GET_SNK_CAP, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_SINK_CAPA not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to perform a Data Role Swap.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestDataRoleSwap(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_DR_SWAP, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "DRS not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to perform a Power Role Swap.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestPowerRoleSwap(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_PR_SWAP, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "PRS not accepted by the stack");
+  }
+  return USBPD_ERROR;
+}
+
+/**
+  * @brief  Request the PE to perform a VConn Swap.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestVconnSwap(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_VCONN_SWAP, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "VCS not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a soft reset.
+  * @param  port_num The current port number
+  * @param  sop_type SOP Type based on @ref usbpd_sop_type_t
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestSoftReset(uint8_t port_num, usbpd_sop_type_t sop_type)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_SOFT_RESET, sop_type);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "SOFT_RESET not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a Source Capability message.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestSourceCapability(uint8_t port_num)
+{
+  /* PE will directly get the PDO saved in structure @ref PWR_Port_PDO_Storage */
+  usbpd_status_t status = USBPD_PE_Request_DataMessage(port_num, USBPD_DATAMSG_SRC_CAPABILITIES, NULL);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "SRC_CAPA not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a VDM discovery identity.
+  * @param  port_num The current port number
+  * @param  sop_type SOP Type
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestVDM_DiscoveryIdentify(uint8_t port_num, usbpd_sop_type_t sop_type)
+{
+  usbpd_status_t status = USBPD_ERROR;
+  usbpd_dpm_handle_t *h_dpm;
+
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+
+  if(h_dpm == NULL)
+  {
+    return status;
+  }
+
+  if ((USBPD_SOPTYPE_SOP == sop_type) || (USBPD_TRUE == h_dpm->flag_cable_pd_capable))
+  {
+    status = USBPD_PE_SVDM_RequestIdentity(port_num, sop_type);
+  }
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "VDM Discovery Ident not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a VDM discovery SVID.
+  * @param  port_num The current port number
+  * @param  sop_type SOP Type
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestVDM_DiscoverySVID(uint8_t port_num, usbpd_sop_type_t sop_type)
+{
+  usbpd_status_t status = USBPD_PE_SVDM_RequestSVID(port_num, sop_type);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "VDM discovery SVID not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to perform a VDM Discovery mode message on one SVID.
+  * @param  port_num The current port number
+  * @param  sop_type SOP Type
+  * @param  svid    SVID used for discovery mode message
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestVDM_DiscoveryMode(uint8_t port_num, usbpd_sop_type_t sop_type, uint16_t svid)
+{
+  usbpd_status_t status = USBPD_PE_SVDM_RequestMode(port_num, sop_type, svid);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "VDM Discovery mode not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to perform a VDM mode enter.
+  * @param  port_num   The current port number
+  * @param  sop_type   SOP Type
+  * @param  svid      SVID used for discovery mode message
+  * @param  mode_index Index of the mode to be entered
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestVDM_EnterMode(uint8_t port_num, usbpd_sop_type_t sop_type, uint16_t svid,
+                                              uint8_t mode_index)
+{
+  usbpd_status_t status = USBPD_PE_SVDM_RequestModeEnter(port_num, sop_type, svid, mode_index);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "VDM mode enter not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to perform a VDM mode exit.
+  * @param  port_num   The current port number
+  * @param  sop_type   SOP Type
+  * @param  svid      SVID used for discovery mode message
+  * @param  mode_index Index of the mode to be exit
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestVDM_ExitMode(uint8_t port_num, usbpd_sop_type_t sop_type, uint16_t svid,
+                                             uint8_t mode_index)
+{
+  usbpd_status_t status = USBPD_PE_SVDM_RequestModeExit(port_num, sop_type, svid, mode_index);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "VDM mode exit not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a Display Port status.
+  * @param  port_num   The current port number
+  * @param  sop_type   SOP Type
+  * @param  svid      Used SVID
+  * @param  p_dp_status Pointer on DP Status data (32 bit)
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestDisplayPortStatus(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                                  uint16_t svid, uint32_t *p_dp_status)
+{
+  usbpd_status_t status;
+  status = USBPD_PE_SVDM_RequestSpecific(port_num, sop_type, USBPD_VDM_SVDM_SPECIFIC_1, svid);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "Display Port status not accepted by the stack");
+  }
+  return status;
+}
+/**
+  * @brief  Request the PE to send a Display Port Config.
+  * @param  port_num   The current port number
+  * @param  sop_type   SOP Type
+  * @param  svid      Used SVID
+  * @param  p_dp_config Pointer on DP Config data (32 bit)
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestDisplayPortConfig(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                                  uint16_t svid, uint32_t *p_dp_config)
+{
+  usbpd_status_t status;
+  status = USBPD_PE_SVDM_RequestSpecific(port_num, sop_type, USBPD_VDM_SVDM_SPECIFIC_2, svid);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "Display Port Config not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to perform a VDM Attention.
+  * @param  port_num The current port number
+  * @param  sop_type SOP Type
+  * @param  svid    Used SVID
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestAttention(uint8_t port_num, usbpd_sop_type_t sop_type, uint16_t svid)
+{
+  usbpd_status_t status = USBPD_PE_SVDM_RequestAttention(port_num, sop_type, svid);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "VDM ATTENTION not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send an ALERT to port partner.
+  * @param  port_num The current port number
+  * @param  alert   Alert based on @ref usbpd_alert_data_object_t
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestAlert(uint8_t port_num, usbpd_alert_data_object_t alert)
+{
+  usbpd_status_t status = USBPD_PE_Request_DataMessage(port_num, USBPD_DATAMSG_ALERT, (uint32_t *)&alert.d32);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "ALERT not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to get a source capability extended.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetSourceCapabilityExt(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_GET_SRC_CAPEXT, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_SRC_CAPA_EXT not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to get a sink capability extended.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetSinkCapabilityExt(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_GET_SNK_CAPEXT, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_SINK_CAPA_EXT not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to get a manufacturer info.
+  * @param  port_num The current port number
+  * @param  sop_type SOP Type
+  * @param  p_manu_info_data Pointer on manufacturer info based on @ref usbpd_gmidb_t
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetManufacturerInfo(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                                    uint8_t *p_manu_info_data)
+{
+  usbpd_status_t status = USBPD_ERROR;
+  if (USBPD_SOPTYPE_SOP == sop_type)
+  {
+    status = USBPD_PE_SendExtendedMessage(port_num, sop_type, USBPD_EXT_GET_MANUFACTURER_INFO,
+                                          (uint8_t *)p_manu_info_data, (uint16_t)sizeof(usbpd_gmidb_t));
+  }
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_MANU_INFO not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to request a GET_PPS_STATUS.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetPPS_Status(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_GET_PPS_STATUS, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_PPS_STATUS not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to request a GET_STATUS.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetStatus(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_GET_STATUS, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_STATUS not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to perform a Fast Role Swap.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestFastRoleSwap(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_FR_SWAP, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "FRS not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a GET_COUNTRY_CODES message.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetCountryCodes(uint8_t port_num)
+{
+  usbpd_status_t status = USBPD_PE_Request_CtrlMessage(port_num, USBPD_CONTROLMSG_GET_COUNTRY_CODES, USBPD_SOPTYPE_SOP);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_COUNTRY_CODES not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a GET_COUNTRY_INFO message.
+  * @param  port_num     The current port number
+  * @param  country_code Country code (1st character and 2nd of the Alpha-2 Country)
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetCountryInfo(uint8_t port_num, uint16_t country_code)
+{
+  usbpd_status_t status = USBPD_PE_Request_DataMessage(port_num, USBPD_DATAMSG_GET_COUNTRY_INFO,
+                                                       (uint32_t *)&country_code);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_COUNTRY_INFO not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a GET_BATTERY_CAPA.
+  * @param  port_num         The current port number
+  * @param  p_battery_cap_ref  Pointer on the Battery Capability reference
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetBatteryCapability(uint8_t port_num, uint8_t *p_battery_cap_ref)
+{
+  usbpd_status_t status = USBPD_PE_SendExtendedMessage(port_num, USBPD_SOPTYPE_SOP, USBPD_EXT_GET_BATTERY_CAP,
+                                                       (uint8_t *)p_battery_cap_ref, 1U);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_BATTERY_CAPA not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a GET_BATTERY_STATUS.
+  * @param  port_num           The current port number
+  * @param  p_battery_status_ref Pointer on the Battery Status reference
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestGetBatteryStatus(uint8_t port_num, uint8_t *p_battery_status_ref)
+{
+  usbpd_status_t status = USBPD_PE_SendExtendedMessage(port_num, USBPD_SOPTYPE_SOP, USBPD_EXT_GET_BATTERY_STATUS,
+                                                       (uint8_t *)p_battery_status_ref, 1U);
+  if (USBPD_OK != status)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "GET_BATTERY_STATUS not accepted by the stack");
+  }
+  return status;
+}
+
+/**
+  * @brief  Request the PE to send a SECURITY_REQUEST.
+  * @param  port_num The current port number
+  * @retval USBPD Status
+  */
+usbpd_status_t USBPD_DPM_RequestSecurityRequest(uint8_t port_num)
+{
+  USBPD_TRACE_INFO_PRINTF(port_num, "SECURITY_REQUEST not accepted by the stack");
+  return USBPD_REJECT;
+}
+
+/**
+  * @}
+  */
+
+/** @addtogroup USBPD_USER_PRIVATE_FUNCTIONS
+  * @{
+  */
+
+/**
+  * @brief  Examine a given SRC PDO to check if matching with SNK capabilities.
+  * @param  port_num The current port number.
+  * @param  src_pdo Selected SRC PDO (32 bits)
+  * @param  p_requested_voltage Pointer on Voltage value that could be reached if SRC PDO is
+  *                             requested (only valid if USBPD_TRUE is returned) in mV
+  * @param  p_requested_pwr Pointer on Power value that could be reached if SRC PDO is requested
+  *                         (only valid if USBPD_TRUE is returned) in mW
+  * @retval USBPD_FALSE of USBPD_TRUE (USBPD_TRUE returned in SRC PDO is considered matching with SNK profile)
+  */
+uint32_t USBPD_DPM_SNK_EvaluateMatchWithSRCPDO(uint8_t port_num, uint32_t src_pdo, uint32_t *p_requested_voltage,
+                                               uint32_t *p_requested_pwr)
+{
+  usbpd_pdo_t srcpdo;
+  usbpd_pdo_t snkpdo;
+  uint32_t match = USBPD_FALSE;
+  uint32_t nbsnkpdo;
+  uint32_t snkpdo_array[USBPD_MAX_NB_PDO];
+  uint32_t i;
+  uint32_t srcvoltage50mv;
+  uint32_t srcmaxvoltage50mv;
+  uint32_t srcminvoltage50mv;
+  uint32_t srcmaxcurrent10ma;
+  uint32_t snkvoltage50mv;
+  uint32_t snkmaxvoltage50mv;
+  uint32_t snkminvoltage50mv;
+  uint32_t snkopcurrent10ma;
+  uint32_t maxrequestedpower;
+  uint32_t currentrequestedpower;
+  uint32_t maxrequestedvoltage;
+  uint32_t currentrequestedvoltage;
+  uint32_t snkoppower250mw;
+  uint32_t srcmaxpower250mw;
+
+  /* Retrieve SNK PDO list from PWR storage: PDO values + nb of u32 written by PWR (nb of PDOs) */
+  USBPD_PWR_GetPortPDOs(port_num, USBPD_CORE_DATAINFO_DATATYPE_SNK_PDO, (uint8_t *)snkpdo_array, &nbsnkpdo);
+  if (0U == nbsnkpdo)
+  {
+    return (USBPD_FALSE);
+  }
+  /* Set default output values */
+  maxrequestedpower    = 0U;
+  maxrequestedvoltage  = 0U;
+  /* Check SRC PDO value according to its type */
+  srcpdo.d32 = src_pdo;
+  switch ((usbpd_core_pdo_type_t)srcpdo.pdo_generic.pdo_type)
+  {
+    /* SRC Fixed Supply PDO */
+    case USBPD_CORE_PDO_TYPE_FIXED:
+      srcvoltage50mv = srcpdo.pdo_src_fixed.voltage_50mv_units;
+      srcmaxcurrent10ma = srcpdo.pdo_src_fixed.current_max_10ma_units;
+      /* Loop through SNK PDO list */
+      for (i = 0U; i < nbsnkpdo; i++)
+      {
+        currentrequestedpower = 0U;
+        currentrequestedvoltage = 0U;
+
+        /* Retrieve SNK PDO value according to its type */
+        snkpdo.d32 = snkpdo_array[i];
+        switch ((usbpd_core_pdo_type_t)snkpdo.pdo_generic.pdo_type)
+        {
+          /* SNK Fixed Supply PDO */
+          case USBPD_CORE_PDO_TYPE_FIXED:
+          {
+            snkvoltage50mv = snkpdo.pdo_snk_fixed.voltage_50mv_units;
+            snkopcurrent10ma = snkpdo.pdo_snk_fixed.operational_current_10ma_units;
+            /* Match if:
+                 SNK Voltage = SRC Voltage
+                 and
+                 SNK Op Current <= SRC Max Current
+               Requested Voltage: SNK Voltage
+               Requested Op Current: SNK Op Current
+               Requested Max Current: SNK Op Current
+            */
+            if ((snkvoltage50mv == srcvoltage50mv)
+                && (snkopcurrent10ma <= srcmaxcurrent10ma))
+            {
+              currentrequestedpower = (snkvoltage50mv * snkopcurrent10ma) / 2U; /* to get value in mw */
+              currentrequestedvoltage = snkvoltage50mv;
+            }
+            break;
+          }
+          /* SNK Variable Supply (non-battery) PDO */
+          case USBPD_CORE_PDO_TYPE_VARIABLE:
+            snkmaxvoltage50mv = snkpdo.pdo_snk_variable.voltage_max_50mv_units;
+            snkminvoltage50mv = snkpdo.pdo_snk_variable.voltage_min_50mv_units;
+            snkopcurrent10ma  = snkpdo.pdo_snk_variable.operational_current_10ma_units;
+            /* Match if:
+                 SNK Max voltage >= SRC Voltage
+                 and
+                 SNK Min voltage <= SRC Voltage
+                 and
+                 SNK Op current <= SRC Max current
+               Requested Voltage: SRC Voltage
+               Requested Op Current: SNK Op Current
+               Requested Max Current: SNK Op Current
+            */
+            if ((snkmaxvoltage50mv >= srcvoltage50mv)
+                && (snkminvoltage50mv <= srcvoltage50mv)
+                && (snkopcurrent10ma  <= srcmaxcurrent10ma))
+            {
+              currentrequestedpower = (srcvoltage50mv * snkopcurrent10ma) / 2U; /* to get value in mw */
+              currentrequestedvoltage = srcvoltage50mv;
+            }
+            break;
+          /* SNK Battery Supply PDO */
+          case USBPD_CORE_PDO_TYPE_BATTERY:
+            snkmaxvoltage50mv = snkpdo.pdo_snk_battery.voltage_max_50mv_units;
+            snkminvoltage50mv = snkpdo.pdo_snk_battery.voltage_min_50mv_units;
+            snkoppower250mw   = snkpdo.pdo_snk_battery.operational_pwr_250mw_units;
+            /* Match if:
+                 SNK Max voltage >= SRC Voltage
+                 and
+                 SNK Min voltage <= SRC Voltage
+                 and
+                 SNK Op power <= SRC Max current * SRC Voltage
+               Requested Voltage: SRC Voltage
+               Requested Op Current: SNK Op Power/ SRC Voltage
+               Requested Max Current: SNK Op Power/ SRC Voltage
+            */
+            if ((snkmaxvoltage50mv >= srcvoltage50mv)
+                && (snkminvoltage50mv <= srcvoltage50mv)
+                && (snkoppower250mw <= ((srcvoltage50mv * srcmaxcurrent10ma) / 500U)))
+              /* to get value in 250 mw units */
+            {
+              currentrequestedvoltage = srcvoltage50mv;
+              currentrequestedpower = snkoppower250mw;
+            }
+            break;
+          /* SNK Augmented Power Data Object (APDO) */
+          case USBPD_CORE_PDO_TYPE_APDO:
+            break;
+          default:
+            break;
+        }
+        if (currentrequestedpower > maxrequestedpower)
+        {
+          match = USBPD_TRUE;
+          maxrequestedpower   = currentrequestedpower;
+          maxrequestedvoltage = currentrequestedvoltage;
+        }
+      }
+      break;
+    /* SRC Variable Supply (non-battery) PDO */
+    case USBPD_CORE_PDO_TYPE_VARIABLE:
+      srcmaxvoltage50mv = srcpdo.pdo_src_variable.voltage_max_50mv_units;
+      srcminvoltage50mv = srcpdo.pdo_src_variable.voltage_min_50mv_units;
+      srcmaxcurrent10ma = srcpdo.pdo_src_variable.current_max_10ma_units;
+      /* Loop through SNK PDO list */
+      for (i = 0U; i < nbsnkpdo; i++)
+      {
+        currentrequestedpower = 0U;
+        currentrequestedvoltage = 0U;
+        /* Retrieve SNK PDO value according to its type */
+        snkpdo.d32 = snkpdo_array[i];
+        switch ((usbpd_core_pdo_type_t)snkpdo.pdo_generic.pdo_type)
+        {
+          /* SNK Fixed Supply PDO */
+          case USBPD_CORE_PDO_TYPE_FIXED:
+            /* No match */
+            break;
+          /* SNK Variable Supply (non-battery) PDO */
+          case USBPD_CORE_PDO_TYPE_VARIABLE:
+            snkmaxvoltage50mv = snkpdo.pdo_snk_variable.voltage_max_50mv_units;
+            snkminvoltage50mv = snkpdo.pdo_snk_variable.voltage_min_50mv_units;
+            snkopcurrent10ma  = snkpdo.pdo_snk_variable.operational_current_10ma_units;
+            /* Match if:
+                 SNK Max voltage >= SRC Max Voltage
+                 and
+                 SNK Min voltage <= SRC Min Voltage
+                 and
+                 SNK Op current <= SRC Max current
+               Requested Voltage: Any value between SRC Min Voltage and SRC Max Voltage
+               Requested Op Current: SNK Op Current
+               Requested Max Current: SNK Op Current
+            */
+            if ((snkmaxvoltage50mv >= srcmaxvoltage50mv)
+                && (snkminvoltage50mv <= srcminvoltage50mv)
+                && (snkopcurrent10ma <= srcmaxcurrent10ma))
+            {
+              currentrequestedpower = (srcmaxvoltage50mv * snkopcurrent10ma) / 2U; /* to get value in mw */
+              currentrequestedvoltage = srcmaxvoltage50mv;
+            }
+            break;
+          /* SNK Battery Supply PDO */
+          case USBPD_CORE_PDO_TYPE_BATTERY:
+            snkmaxvoltage50mv = snkpdo.pdo_snk_battery.voltage_max_50mv_units;
+            snkminvoltage50mv = snkpdo.pdo_snk_battery.voltage_min_50mv_units;
+            snkoppower250mw   = snkpdo.pdo_snk_battery.operational_pwr_250mw_units;
+            /* Match if:
+                 SNK Max voltage >= SRC Max Voltage
+                 and
+                 SNK Min voltage <= SRC Min Voltage
+                 and
+                 SNK Op power <= SRC Max current * SRC Max Voltage
+               Requested Voltage: Any value between SRC Min Voltage and SRC Max Voltage, that fulfill
+                                   SNK Op power <= Voltage * SRC Max Current
+               Requested Op Current: SNK Op Power/ SRC Voltage
+               Requested Max Current: SNK Op Power/ SRC Voltage
+            */
+            if ((snkmaxvoltage50mv >= srcmaxvoltage50mv)
+                && (snkminvoltage50mv <= srcminvoltage50mv)
+                && (snkoppower250mw <= ((srcmaxvoltage50mv *
+                                         srcmaxcurrent10ma) / 500U))) /* to get value in 250 mw units */
+            {
+              currentrequestedpower   = snkoppower250mw * 250U; /* to get value in mw */
+              currentrequestedvoltage = srcmaxvoltage50mv;
+            }
+            break;
+          /* SNK Augmented Power Data Object (APDO) */
+          case USBPD_CORE_PDO_TYPE_APDO:
+            break;
+          default:
+            break;
+        }
+        if (currentrequestedpower > maxrequestedpower)
+        {
+          match = USBPD_TRUE;
+          maxrequestedpower   = currentrequestedpower;
+          maxrequestedvoltage = currentrequestedvoltage;
+        }
+      }
+      break;
+    /* SRC Battery Supply PDO */
+    case USBPD_CORE_PDO_TYPE_BATTERY:
+      srcmaxvoltage50mv = srcpdo.pdo_src_battery.voltage_max_50mv_units;
+      srcminvoltage50mv = srcpdo.pdo_src_battery.voltage_min_50mv_units;
+      srcmaxpower250mw  = srcpdo.pdo_src_battery.allowable_pwr_max_250mw_units;
+      /* Loop through SNK PDO list */
+      for (i = 0U; i < nbsnkpdo; i++)
+      {
+        currentrequestedpower = 0U;
+        currentrequestedvoltage = 0U;
+        /* Retrieve SNK PDO value according to its type */
+        snkpdo.d32 = snkpdo_array[i];
+        switch ((usbpd_core_pdo_type_t)snkpdo.pdo_generic.pdo_type)
+        {
+          /* SNK Fixed Supply PDO */
+          case USBPD_CORE_PDO_TYPE_FIXED:
+            /* No match */
+            break;
+          /* SNK Variable Supply (non-battery) PDO */
+          case USBPD_CORE_PDO_TYPE_VARIABLE:
+            snkmaxvoltage50mv = snkpdo.pdo_snk_variable.voltage_max_50mv_units;
+            snkminvoltage50mv = snkpdo.pdo_snk_variable.voltage_min_50mv_units;
+            snkopcurrent10ma  = snkpdo.pdo_snk_variable.operational_current_10ma_units;
+            /* Match if:
+                 SNK Max voltage >= SRC Max Voltage
+                 and
+                 SNK Min voltage <= SRC Min Voltage
+                 and
+                 SNK Op current * SRC Max Voltage <= SRC Max Power
+               Requested Voltage: Any value between SRC Min Voltage and SRC Max Voltage: SRC Max Voltage
+               Requested Op Current: SNK Op Current
+               Requested Max Current: SNK Op Current
+            */
+            if ((snkmaxvoltage50mv >= srcmaxvoltage50mv)
+                && (snkminvoltage50mv <= srcminvoltage50mv)
+                && (srcmaxvoltage50mv * snkopcurrent10ma <= srcmaxpower250mw))
+            {
+              currentrequestedpower = (srcmaxvoltage50mv * snkopcurrent10ma) / 2U; /* to get value in mw */
+              currentrequestedvoltage = srcmaxvoltage50mv;
+            }
+            break;
+          /* SNK Battery Supply PDO */
+          case USBPD_CORE_PDO_TYPE_BATTERY:
+            snkmaxvoltage50mv = snkpdo.pdo_snk_battery.voltage_max_50mv_units;
+            snkminvoltage50mv = snkpdo.pdo_snk_battery.voltage_min_50mv_units;
+            snkoppower250mw   = snkpdo.pdo_snk_battery.operational_pwr_250mw_units;
+            /* Match if:
+                 SNK Max voltage >= SRC Max Voltage
+                 and
+                 SNK Min voltage <= SRC Min Voltage
+                 and
+                 SNK Op power <= SRC Max power
+               Requested Voltage: Any value between SRC Min Voltage and SRC Max Voltage, that fulfill
+                                   SNK Op power <= Voltage * SRC Max Current
+               Requested Op Current: SNK Op Power/ SRC Voltage
+               Requested Max Current: SNK Op Power/ SRC Voltage
+            */
+            if ((snkmaxvoltage50mv >= srcmaxvoltage50mv)
+                && (snkminvoltage50mv <= srcminvoltage50mv)
+                && (snkoppower250mw <= srcmaxpower250mw))
+            {
+              currentrequestedpower   = snkoppower250mw * 250U; /* to get value in mw */
+              currentrequestedvoltage = srcmaxvoltage50mv;
+            }
+            break;
+          /* SNK Augmented Power Data Object (APDO) */
+          case USBPD_CORE_PDO_TYPE_APDO:
+            break;
+          default:
+            break;
+        }
+        if (currentrequestedpower > maxrequestedpower)
+        {
+          match = USBPD_TRUE;
+          maxrequestedpower   = currentrequestedpower;
+          maxrequestedvoltage = currentrequestedvoltage;
+        }
+      }
+      break;
+    /* Augmented Power Data Object (APDO) */
+    case USBPD_CORE_PDO_TYPE_APDO:
+    {
+    if(srcpdo.pdo_src_snk_apdo.programmable_pwr_supply == USBPD_CORE_APDO_TYPE_PPS)
+    {
+      uint32_t srcmaxvoltage100mv;
+      uint32_t srcmaxcurrent50ma;
+      srcmaxvoltage100mv = srcpdo.pdo_src_snk_apdo.voltage_max_100mv_units;
+      srcmaxcurrent50ma = srcpdo.pdo_src_snk_apdo.current_max_50ma_units;
+      /* Loop through SNK PDO list */
+      for (i = 0U; i < nbsnkpdo; i++)
+      {
+        currentrequestedpower = 0U;
+        currentrequestedvoltage = 0U;
+        /* Retrieve SNK PDO value according to its type */
+        snkpdo.d32 = snkpdo_array[i];
+        switch ((usbpd_core_pdo_type_t)snkpdo.pdo_generic.pdo_type)
+        {
+          case USBPD_CORE_PDO_TYPE_FIXED:
+          case USBPD_CORE_PDO_TYPE_VARIABLE:
+          case USBPD_CORE_PDO_TYPE_BATTERY:
+            /* No match */
+            break;
+          /* SNK Augmented Power Data Object (APDO) */
+          case USBPD_CORE_PDO_TYPE_APDO:
+          {
+            uint32_t snkmaxvoltage100mv;
+            uint32_t snkminvoltage100mv;
+            uint32_t snkmaxcurrent50ma;
+            snkminvoltage100mv = snkpdo.pdo_src_snk_apdo.voltage_min_100mv_units;
+            snkmaxvoltage100mv = snkpdo.pdo_src_snk_apdo.voltage_max_100mv_units;
+            snkmaxcurrent50ma = snkpdo.pdo_src_snk_apdo.current_max_50ma_units;
+            /* Match if voltage matches with the APDO voltage range */
+            if ((USBPD_PWR_DECODE_100MV(snkminvoltage100mv) <= (*p_requested_voltage))
+                && ((*p_requested_voltage) <= USBPD_PWR_DECODE_100MV(snkmaxvoltage100mv))
+                && (snkmaxcurrent50ma <= srcmaxcurrent50ma))
+            {
+              if (0U != *p_requested_pwr)
+              {
+                currentrequestedpower = (*p_requested_voltage *
+                                         USBPD_PWR_DECODE_50MA(snkmaxcurrent50ma)) / 1000U; /* to get value in mw */
+                currentrequestedvoltage = (*p_requested_voltage / 50U);
+              }
+              else
+              {
+                *p_requested_voltage = MIN(USBPD_PWR_DECODE_100MV(srcmaxvoltage100mv),
+                                           USBPD_PWR_DECODE_100MV(snkmaxvoltage100mv));
+                currentrequestedpower = (*p_requested_voltage *
+                                         USBPD_PWR_DECODE_50MA(snkmaxcurrent50ma)) / 1000U; /* to get value in mw */
+                currentrequestedvoltage = (*p_requested_voltage / 50U);
+              }
+            }
+          }
+          break;
+          default:
+            break;
+        }
+        if (currentrequestedpower > maxrequestedpower)
+        {
+          match = USBPD_TRUE;
+          maxrequestedpower   = currentrequestedpower;
+          maxrequestedvoltage = currentrequestedvoltage;
+        }
+      }
+    }
+    if(srcpdo.pdo_src_spr_avs.spr_adjustable_voltage == USBPD_CORE_APDO_TYPE_SPR_AVS)
+    {
+      uint16_t srcmaxcurrent15v10ma, srcmaxcurrent20v10ma;
+      srcmaxcurrent15v10ma = srcpdo.pdo_src_spr_avs.current_max_15v_10mA_units;
+      srcmaxcurrent20v10ma = srcpdo.pdo_src_spr_avs.current_max_20v_10mA_units;
+      /* Loop through SNK PDO list */
+      for (uint16_t i=0; i<nbsnkpdo; i++)
+      {
+        currentrequestedpower = 0;
+        currentrequestedvoltage = 0;
+        /* Retrieve SNK PDO value according to its type */
+        snkpdo.d32 = snkpdo_array[i];
+        switch((usbpd_core_pdo_type_t)snkpdo.pdo_generic.pdo_type)
+        {
+        case USBPD_CORE_PDO_TYPE_FIXED:
+          {
+            uint16_t min9v50mv, max15v50mv, max20v50mv;
+            snkvoltage50mv = snkpdo.pdo_snk_fixed.voltage_50mv_units;
+            snkopcurrent10ma = snkpdo.pdo_snk_fixed.operational_current_10ma_units;
+            min9v50mv = USBPD_PWR_MV_50MV(9);
+            max20v50mv = USBPD_PWR_MV_50MV(20);
+            max15v50mv = USBPD_PWR_MV_50MV(15);
+            if (srcmaxcurrent20v10ma != 0)
+            {
+              if ((snkopcurrent10ma <= srcmaxcurrent20v10ma)
+                  && (snkopcurrent10ma <= srcmaxcurrent15v10ma)
+                    && (min9v50mv <= snkvoltage50mv)
+                      && (snkvoltage50mv <= max20v50mv))
+              {
+                currentrequestedpower = (15000 * 1500) / 1000; /* to get value in mw */ //*p_requested_pwr;
+                currentrequestedvoltage =  (15000 / 50);
+              }
+            }
+            else
+            {
+              if ((snkopcurrent10ma <= srcmaxcurrent15v10ma)
+                  && (min9v50mv <= snkvoltage50mv)
+                    && (snkvoltage50mv <= max15v50mv))
+              {
+                currentrequestedpower = (11200 * 1500) / 1000; /* to get value in mw */ //*p_requested_pwr;
+                currentrequestedvoltage =  (11200 / 50);
+              }
+            }
+          }
+          break;
+        case USBPD_CORE_PDO_TYPE_VARIABLE:
+          break;
+        case USBPD_CORE_PDO_TYPE_BATTERY:
+          /* No match */
+          break;
+          /* SNK Augmented Power Data Object (APDO) */
+        case USBPD_CORE_PDO_TYPE_APDO:
+          {
+            uint16_t snkmaxcurrent15v10ma, snkmaxcurrent20v10ma;
+            snkmaxcurrent15v10ma = snkpdo.pdo_snk_spr_avs.current_max_15v_10mA_units;
+            snkmaxcurrent20v10ma = snkpdo.pdo_snk_spr_avs.current_max_20v_10mA_units;
+            if (srcmaxcurrent20v10ma != 0)
+            {
+              if ((snkmaxcurrent20v10ma <= srcmaxcurrent20v10ma)
+                  && (snkmaxcurrent15v10ma <= srcmaxcurrent15v10ma))
+              {
+                currentrequestedpower = (16500 * USBPD_PWR_DECODE_10MA(snkmaxcurrent20v10ma)) / 1000; /* to get value in mw */
+                currentrequestedvoltage = (16500 / 50);
+              }
+            }
+            else
+            {
+              if (snkmaxcurrent15v10ma <= srcmaxcurrent15v10ma)
+              {
+                currentrequestedpower = (11200 * 1500) / 1000; /* to get value in mw */ //*p_requested_pwr;
+                currentrequestedvoltage = (11200 / 50);
+              }
+            }
+          }
+          break;
+        default:
+          break;
+        }
+        if (currentrequestedpower > maxrequestedpower)
+        {
+          match = USBPD_TRUE;
+          maxrequestedpower   = currentrequestedpower;
+          maxrequestedvoltage = currentrequestedvoltage;
+        }
+      }
+    }
+    }
+    break;
+    default:
+      return (USBPD_FALSE);
+  }
+  if (maxrequestedpower > 0U)
+  {
+    *p_requested_pwr   = maxrequestedpower;
+    *p_requested_voltage = maxrequestedvoltage * 50U; /* value in mV */
+  }
+  return (match);
+}
+
+/**
+  * @brief  Find PDO index that offers the most amount of power and in accordance with SNK capabilities.
+  * @param  port_num The current port number.
+  * @param  p_request_pwr_details Sink requested power details structure pointer
+  * @param  sel_method Selection method
+  * @retval Index of PDO within source capabilities message (DPM_NO_SRC_PDO_FOUND indicating not found)
+  */
+static uint32_t DPM_FindVoltageIndex(uint8_t port_num, usbpd_dpm_snk_pwr_request_details_t *p_request_pwr_details,
+                                     usbpd_dpm_pdo_sel_method_t sel_method)
+{
+  const uint32_t *ptpdoarray;
+  usbpd_pdo_t  pdo;
+  uint32_t voltage;
+  uint32_t reqvoltage;
+  uint32_t nbpdo;
+  uint32_t allowablepower;
+  uint32_t selpower;
+  uint32_t allowablecurrent;
+  uint32_t selcurrent;
+  uint32_t curr_index = DPM_NO_SRC_PDO_FOUND;
+  uint32_t temp_index;
+  usbpd_dpm_user_settings_t *puser = (usbpd_dpm_user_settings_t *)&usbpd_dpm_user_settings[port_num];
+  usbpd_dpm_handle_t *h_dpm;
+  h_dpm = USBPD_PWR_Get_DPM_Handler(port_num);
+
+  if((puser == NULL) || (h_dpm == NULL))
+  {
+    return -1;
+  }
+
+  allowablepower = 0U;
+  selpower       = 0U;
+  reqvoltage     = 0U;
+  voltage        = 0U;
+  selcurrent     = 0U;
+
+  /* Search PDO index among Source PDO of Port */
+  nbpdo = h_dpm->rcv_src_pdo_count;
+  ptpdoarray = h_dpm->p_list_rcv_src_pdo;
+
+  /* search the best PDO in the list of source PDOs */
+  for (temp_index = 0U; temp_index < nbpdo; temp_index++)
+  {
+    pdo.d32 = ptpdoarray[temp_index];
+
+    /* Check if the received source PDO is matching any of the SNK PDO */
+    allowablepower = 0U;
+    if (USBPD_TRUE == USBPD_DPM_SNK_EvaluateMatchWithSRCPDO(port_num, pdo.d32, &voltage, &allowablepower))
+    {
+      allowablecurrent = (allowablepower / voltage) * 1000U;
+
+      /* Choose the best PDO depending on the user preferences */
+      switch (sel_method)
+      {
+        case USBPD_DPM_PDO_SEL_METHOD_MAX_PWR:
+          if (allowablepower > selpower)
+          {
+            /* Consider the current PDO the best one until now */
+            curr_index = temp_index;
+            selpower   = allowablepower;
+            reqvoltage = voltage;
+            selcurrent = allowablecurrent;
+          }
+          break;
+
+        case USBPD_DPM_PDO_SEL_METHOD_MIN_PWR:
+          if ((allowablepower < selpower) || (selpower == 0U))
+          {
+            /* Consider the current PDO the best one until now */
+            curr_index = temp_index;
+            selpower   = allowablepower;
+            reqvoltage = voltage;
+            selcurrent = allowablecurrent;
+          }
+          break;
+
+        case USBPD_DPM_PDO_SEL_METHOD_MAX_VOLT:
+          if (voltage > reqvoltage)
+          {
+            /* Consider the current PDO the best one until now */
+            curr_index = temp_index;
+            selpower   = allowablepower;
+            reqvoltage = voltage;
+            selcurrent = allowablecurrent;
+          }
+          break;
+
+        case USBPD_DPM_PDO_SEL_METHOD_MIN_VOLT:
+          if ((voltage < reqvoltage) || (reqvoltage == 0U))
+          {
+            /* Consider the current PDO the best one until now */
+            curr_index = temp_index;
+            selpower   = allowablepower;
+            reqvoltage = voltage;
+            selcurrent = allowablecurrent;
+          }
+          break;
+
+        case USBPD_DPM_PDO_SEL_METHOD_MAX_CUR:
+          if (allowablecurrent > selcurrent)
+          {
+            /* Consider the current PDO the best one until now */
+            curr_index = temp_index;
+            selpower   = allowablepower;
+            reqvoltage = voltage;
+            selcurrent = allowablecurrent;
+          }
+          break;
+
+        case USBPD_DPM_PDO_SEL_METHOD_MIN_CUR:
+          if ((allowablecurrent < selcurrent) || (selcurrent == 0U))
+          {
+            /* Consider the current PDO the best one until now */
+            curr_index = temp_index;
+            selpower   = allowablepower;
+            reqvoltage = voltage;
+            selcurrent = allowablecurrent;
+          }
+          break;
+
+        default:
+          /* Default behavior: last PDO is selected */
+          curr_index = temp_index;
+          selpower   = allowablepower;
+          reqvoltage = voltage;
+          selcurrent = allowablecurrent;
+          break;
+      }
+    }
+  }
+
+  /* If a suitable PDO was found */
+  if (curr_index != DPM_NO_SRC_PDO_FOUND)
+  {
+    /* Fill the request power details */
+    p_request_pwr_details->operating_current_max_1ma_units =
+      puser->dpm_snk_requested_pwr.operating_current_max_1ma_units;
+    p_request_pwr_details->operating_current_1ma_units     = (1000U * selpower) / reqvoltage;
+    p_request_pwr_details->operating_pwr_max_1mw_units     = puser->dpm_snk_requested_pwr.operating_pwr_max_1mw_units;
+    p_request_pwr_details->operating_pwr_1mw_units         = selpower;
+    p_request_pwr_details->requested_voltage_1mv_units     = reqvoltage;
+  }
+
+  return curr_index;
+}
+
+/**
+  * @brief  Build RDO to be used in Request message according to selected PDO from received SRC Capabilities.
+  * @param  port_num The current port number.
+  * @param  index_src_pdo Index on the selected SRC PDO (value between 0 to 6).
+  * @param  p_request_pwr_details Sink requested power details structure pointer.
+  * @param  rdo_out Pointer on the RDO.
+  * @param  p_pwr_object Pointer on the selected power object.
+  */
+static void DPM_SNK_BuildRDOfromSelectedPDO(uint8_t port_num, uint8_t index_src_pdo,
+                                            const usbpd_dpm_snk_pwr_request_details_t *p_request_pwr_details,
+                                            usbpd_rdo_snk_t *rdo_out, usbpd_core_pdo_type_t *p_pwr_object)
+{
+  uint32_t mv;
+  uint32_t mw;
+  uint32_t ma;
+  uint32_t size;
+  usbpd_pdo_t pdo;
+  usbpd_rdo_snk_t rdo;
+  usbpd_dpm_handle_t *pdhandle = USBPD_PWR_Get_DPM_Handler(port_num);
+  usbpd_dpm_user_settings_t *puser = (usbpd_dpm_user_settings_t *)&usbpd_dpm_user_settings[port_num];
+  uint32_t snkpdolist[USBPD_MAX_NB_PDO];
+  usbpd_pdo_t snk_fixed_pdo;
+  usbpd_params_t *dpm_params;
+  usbpd_settings_t *dpm_settings;
+
+  dpm_params = USBPD_PE_Get_DPM_Params(port_num);
+  dpm_settings = USBPD_PE_Get_DPM_Settings(port_num);
+
+  if((dpm_params == NULL) || (dpm_settings == NULL) || (puser == NULL) || (pdhandle == NULL))
+  {
+    return;
+  }
+
+  /* Initialize RDO */
+  rdo.d32 = 0U;
+  /* Read SNK PDO list for retrieving useful data to fill in RDO */
+  USBPD_PWR_GetPortPDOs(port_num, USBPD_CORE_DATAINFO_DATATYPE_SNK_PDO, (uint8_t *)&snkpdolist[0U], &size);
+  /* Store value of 1st SNK PDO (Fixed) in local variable */
+  snk_fixed_pdo.d32 = snkpdolist[0U];
+  /* Set common fields in RDO */
+  pdo.d32 = pdhandle->p_list_rcv_src_pdo[0U];
+  rdo.rdo_generic.usb_com_capable     = snk_fixed_pdo.pdo_snk_fixed.usb_com_capable;
+  if (USBPD_SPECIFICATION_REV2 < dpm_params->pe_spec_revision)
+  {
+    rdo.rdo_fixed_variable.unchunked_extended_message =
+    dpm_settings->pe_pd3_support.b.pe_unchunk_support;
+    dpm_params->pe_unchunk_support   = USBPD_FALSE;
+    /* Set unchuncked bit if supported by port partner */
+    if (USBPD_TRUE == pdo.pdo_src_fixed.unchunked_extended_message)
+    {
+      dpm_params->pe_unchunk_support   = USBPD_TRUE;
+    }
+  }
+  /* If no valid SNK PDO or if no SRC PDO match found (index>=nb of valid received SRC PDOs */
+  if ((size < 1U) || (index_src_pdo >= pdhandle->rcv_src_pdo_count))
+  {
+    /* USBPD_DPM_EvaluateCapabilities: Mismatch, could not find desired pdo index */
+    USBPD_TRACE_WARNING_PRINTF(port_num, "%s: Issue with SRC PDO selection", __func__);
+    rdo.rdo_fixed_variable.object_position            = 1U;
+    rdo.rdo_fixed_variable.operating_current_10ma_units     = pdo.pdo_src_fixed.current_max_10ma_units;
+    rdo.rdo_fixed_variable.operating_current_max_10ma_units = pdo.pdo_src_fixed.current_max_10ma_units;
+    rdo.rdo_fixed_variable.capability_mismatch        = 1U;
+    rdo.rdo_fixed_variable.usb_com_capable            = snk_fixed_pdo.pdo_snk_fixed.usb_com_capable;
+    pdhandle->requested_current_1ma_units = puser->dpm_snk_requested_pwr.operating_current_max_1ma_units;
+    /* USBPD_DPM_EvaluateCapabilities: Mismatch, could not find desired pdo index */
+    pdhandle->rdo_msg = rdo.d32;
+    return;
+  }
+  /* Set the Object position */
+  rdo.rdo_generic.object_position = (uint32_t)index_src_pdo + 1U;
+  rdo.rdo_generic.no_usb_suspend = (uint32_t)pdo.pdo_src_fixed.usb_suspend_supported;
+  /* Extract power information from Power Data Object */
+  pdo.d32 = pdhandle->p_list_rcv_src_pdo[index_src_pdo];
+  *p_pwr_object = (usbpd_core_pdo_type_t)pdo.pdo_generic.pdo_type;
+  /* Retrieve request details from SRC PDO selection */
+  mv = p_request_pwr_details->requested_voltage_1mv_units;
+  ma = p_request_pwr_details->operating_current_1ma_units;
+  switch ((usbpd_core_pdo_type_t)pdo.pdo_generic.pdo_type)
+  {
+    case USBPD_CORE_PDO_TYPE_FIXED:
+    case USBPD_CORE_PDO_TYPE_VARIABLE:
+    {
+      /* USBPD_DPM_EvaluateCapabilities: Mismatch, less power offered than the operating power */
+      ma = USBPD_MIN(ma, puser->dpm_snk_requested_pwr.operating_current_max_1ma_units);
+      mw = (ma * mv) / 1000U; /* mW */
+      pdhandle->requested_current_1ma_units                   = ma;
+      rdo.rdo_fixed_variable.operating_current_10ma_units     = ma / 10U;
+      rdo.rdo_fixed_variable.operating_current_max_10ma_units = ma / 10U;
+      if (mw < puser->dpm_snk_requested_pwr.operating_pwr_1mw_units)
+      {
+        /* USBPD_DPM_EvaluateCapabilities: Mismatch, less power offered than the operating power */
+        rdo.rdo_fixed_variable.operating_current_max_10ma_units =
+          puser->dpm_snk_requested_pwr.operating_current_max_1ma_units / 10U;
+        rdo.rdo_fixed_variable.capability_mismatch = 1U;
+      }
+      break;
+    }
+    case USBPD_CORE_PDO_TYPE_BATTERY:
+    {
+      /* USBPD_DPM_EvaluateCapabilities: Battery Request Data Object */
+      mw = USBPD_MIN(p_request_pwr_details->operating_pwr_1mw_units,
+                     puser->dpm_snk_requested_pwr.operating_pwr_max_1mw_units); /* mW */
+      if (mv != 0U)
+      {
+        ma = (1000U * mw) / mv; /* mA */
+        ma = USBPD_MIN(ma, puser->dpm_snk_requested_pwr.operating_current_max_1ma_units);
+        pdhandle->requested_current_1ma_units = ma;
+        mw = (ma * mv) / 1000U; /* mW */
+        rdo.rdo_battery.operating_pwr_250mw_units = mw / 250U;
+        rdo.rdo_battery.operating_pwr_max_250mw_units = mw / 250U;
+        if (mw < puser->dpm_snk_requested_pwr.operating_pwr_1mw_units)
+        {
+          /* Mismatch, less power offered than the operating power */
+          rdo.rdo_battery.capability_mismatch = 1U;
+        }
+      }
+      break;
+    }
+    case USBPD_CORE_PDO_TYPE_APDO:
+    {
+      if (pdo.pdo_src_spr_avs.spr_adjustable_voltage == USBPD_CORE_APDO_TYPE_SPR_AVS)
+      {
+      pdhandle->requested_current_1ma_units               = ma;
+      dpm_params->spr_apdo                                = USBPD_SPR_APDO_AVS;
+      rdo.rdo_avs.object_position                         = (uint32_t)index_src_pdo + 1U;
+      rdo.rdo_avs.operating_current_50ma_units            = ma / 50;
+      rdo.rdo_avs.output_voltage_25mv_units               = mv / 25;
+      }
+      if (pdo.pdo_src_snk_apdo.programmable_pwr_supply == USBPD_CORE_APDO_TYPE_PPS)
+      {
+      pdhandle->requested_current_1ma_units                = ma;
+      rdo.rdo_programmable.object_position                 = (uint32_t)index_src_pdo + 1U;
+      rdo.rdo_programmable.operating_current_50ma_units    = ma / 50U;
+      rdo.rdo_programmable.output_voltage_20mv_units       = mv / 20U;
+      }
+    }
+    break;
+    default:
+      break;
+  }
+  pdhandle->rdo_msg = rdo.d32;
+  pdhandle->rdo_position  = rdo.rdo_generic.object_position;
+  rdo_out->d32 = pdhandle->rdo_msg;
+  /* Get the requested voltage */
+  pdhandle->requested_voltage_1mv_units = mv;
+}
+
+uint32_t USBPD_DPM_RequestWhatToDo(uint8_t port_num, uint32_t action_id)
+{
+  /* Not implemented */
+  (void)port_num;
+  (void)action_id;
+  return 0U;
+}
+{{else}}
+{{/unless}}
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */

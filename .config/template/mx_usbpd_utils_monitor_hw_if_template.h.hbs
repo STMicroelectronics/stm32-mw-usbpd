@@ -1,0 +1,100 @@
+/**
+  ******************************************************************************
+  * @file    usbpd_utils_monitor_hw_if.h
+  * @brief   Header file for usbpd_utils_monitor_hw_if.c.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_usbpd_license.md file
+  * in the root directory of this software component.
+  * If no mx_usbpd_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
+#ifndef USBPD_UTILS_MONITOR_HW_IF_H
+#define USBPD_UTILS_MONITOR_HW_IF_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
+/* Includes ------------------------------------------------------------------*/
+#include "stm32_hal.h"
+#include "usbpd_trace.h"
+
+/** @addtogroup STM32_USBPD_LIBRARY
+  * @{
+  */
+
+/** @addtogroup USBPD_UTILS
+  * @{
+  */
+
+/** @addtogroup USBPD_UTILS_MONITOR_HW_IF
+  * @{
+  */
+
+/* Exported constants ---------------------------------------------------------*/
+/** @defgroup USBPD_UTILS_MONITOR_HW_IF_Exported_Constants USBPD_UTILS_MONITOR_HW_IF Exported Constants
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Exported types ------------------------------------------------------------*/
+/** @defgroup  USBPD_UTILS_MONITOR_HW_IF_Exported_Types USBPD_UTILS_MONITOR_HW_IF Exported Types
+  * @{
+  */
+
+/**
+  * @brief  USBPD Monitor HW IF Status structures definition.
+  */
+typedef enum
+{
+  USBPD_MONITOR_HW_IF_OK              = 0x00000000U, /*<! Monitor HW IF operation completed successfully */
+  USBPD_MONITOR_HW_IF_ERROR           = 0xFFFFFFFFU, /*<! Monitor HW IF operation completed with error   */
+  USBPD_MONITOR_HW_IF_BUSY            = 0x55555555U, /*<! Monitor HW IF concurrent process ongoing       */
+  USBPD_MONITOR_HW_IF_NOT_IMPLEMENTED = 0xAAAAAAAAU, /*<! Monitor HW IF operation not implemented        */
+  USBPD_MONITOR_HW_IF_TIMEOUT         = 0x5A5A5A5AU  /*<! Monitor HW IF operation exceeds user timeout   */
+} usbpd_monitor_hw_if_status_t;
+
+/**
+  * @}
+  */
+
+/* Exported functions ---------------------------------------------------------*/
+/** @defgroup USBPD_UTILS_MONITOR_HW_IF_Exported_Functions USBPD_UTILS_MONITOR_HW_IF Exported Functions
+  * @{
+  */
+
+usbpd_monitor_hw_if_status_t USBPD_UTILS_MONITOR_HW_IF_LoadExternalData(void);
+usbpd_monitor_hw_if_status_t USBPD_UTILS_MONITOR_HW_IF_ResetExternalData(void);
+usbpd_monitor_hw_if_status_t USBPD_UTILS_MONITOR_HW_IF_SaveExternalData(void);
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
+
+#endif /* USBPD_UTILS_MONITOR_HW_IF_H */

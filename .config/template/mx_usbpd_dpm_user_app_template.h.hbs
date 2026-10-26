@@ -1,0 +1,230 @@
+{{assign "usbpdFilter" (JSONparse '{"cgroup": "STM32CubeMX2 Config", "csub": "USBPD"}')~}}
+{{assign 'usbpd_context' (@root.SWConfigurationAPI.getInstancesConfiguration @root.usbpdFilter)~}}
+{{assign 'usbpd_cxt' @root.usbpd_context.[0].settings.parameters~}}
+{{assign 'no_pd' false}}
+/**
+  ******************************************************************************
+  * @file    mx_usbpd_dpm_user.h
+  * @brief   Header file for mx_usbpd_dpm_user.c.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025-2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_usbpd_license.md file
+  * in the root directory of this software component.
+  * If no mx_usbpd_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+{{#with @root.usbpd_cxt~}}
+{{#if (eq profile.stack_library 'Type C Only')}}
+{{assign 'no_pd' true}}
+{{/if}}
+{{/with}}
+#ifndef MX_USBPD_DPM_USER_H
+#define MX_USBPD_DPM_USER_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
+/* Includes ------------------------------------------------------------------*/
+#include "usbpd_pwr.h"
+#include "usbpd_trace.h"
+#include "usbpd_config.h"
+#include "usbpd_dpm.h"
+{{#if (eq usbpd_cxt.core.basic.core.usb_data_support true)~}}
+#include "mx_usbpd_usb_if.h"
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.dpm.core.vendor_defined_messages true)~}}
+#include "mx_usbpd_vdm_user_app.h"
+{{/if}}
+/** @addtogroup STM32_USBPD_APPLICATION
+  * @{
+  */
+
+/** @addtogroup USBPD_DPM_USER
+  * @{
+  */
+
+/* Exported constants ---------------------------------------------------------*/
+/** @defgroup USBPD_DPM_USER_Exported_Constants USBPD_DPM_USER Exported Constants
+  * @{
+  */
+
+#define DPM_NO_SRC_PDO_FOUND   (0xFFU) /*!< No match found between Received SRC PDO and SNK capabilities */
+
+/**
+  * @}
+  */
+
+/* Exported types ------------------------------------------------------------*/
+/** @defgroup  USBPD_DPM_USER_Exported_Types USBPD_DPM_USER Exported Types
+  * @{
+  */
+
+/**
+  * @brief  Function pointer type for posting a monitor notification.
+  * @param  port_num Port number.
+  * @param  event_val Event value.
+  */
+typedef void (*usbpd_monitor_notif_post_t)(uint8_t port_num, uint16_t event_val);
+
+/**
+  * @brief  Function pointer type for formatting and sending a monitor notification.
+  * @param  port_num Port number.
+  * @param  notification_type Type of notification.
+  * @param  value Value associated with the notification.
+  * @retval Formatted notification value.
+  */
+typedef uint32_t (*usbpd_monitor_notif_format_send_t)(uint8_t port_num, uint32_t notification_type, uint32_t value);
+
+/**
+  * @brief  Function pointer type for saving monitor information.
+  * @param  port_num Port number.
+  * @param  data_id Data identifier.
+  * @param  ptr Pointer to the data.
+  * @param  size Size of the data.
+  */
+typedef void (*usbpd_monitor_save_info_t)(uint8_t port_num, uint8_t data_id, uint8_t *ptr, uint32_t size);
+
+/**
+  * @}
+  */
+
+
+/* Exported variables ------------------------------------------------------------*/
+/** @defgroup  USBPD_DPM_USER_Exported_Variables USBPD_DPM_USER Exported Variables
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Exported functions ---------------------------------------------------------*/
+/** @defgroup USBPD_DPM_USER_Exported_Functions USBPD_DPM_USER Exported Functions
+  * @{
+  */
+
+/** @addtogroup USBPD_DPM_USER_Exported_Functions_GROUP1
+  * @{
+  */
+
+usbpd_status_t USBPD_DPM_UserInit(void);
+void USBPD_DPM_UserDeInit(void);
+void USBPD_DPM_UserExecute(void *argument);
+void USBPD_DPM_WaitForTime(uint8_t port_num, uint32_t time);
+usbpd_status_t USBPD_DPM_User_RegisterDelayCallback(uint8_t port_num, void (*p_callback)(uint8_t, uint32_t));
+void USBPD_DPM_UserCableDetection(uint8_t port_num, usbpd_cad_event_t state);
+{{#unless @root.no_pd}}
+void USBPD_DPM_UserTimerCounter(uint8_t port_num);
+{{else}}
+{{/unless}}
+void USBPD_DPM_SetNotification_MONITOR(usbpd_monitor_notif_format_send_t p_format_send,
+                                       usbpd_monitor_notif_post_t p_post, usbpd_monitor_save_info_t p_save_info);
+
+/**
+  * @}
+  */
+
+/** @addtogroup USBPD_DPM_USER_Exported_Functions_GROUP2
+  * @{
+  */
+
+void           USBPD_DPM_Notification(uint8_t port_num, usbpd_notify_event_t event_val);
+{{#unless @root.no_pd}}
+void           USBPD_DPM_HardReset(uint8_t port_num, usbpd_port_pwr_role_t current_role,
+                                   usbpd_hard_reset_status_t status);
+void           USBPD_DPM_ExtendedMessageReceived(uint8_t port_num, usbpd_extended_msg_t msg_type, uint8_t *p_data,
+                                                 uint16_t data_size);
+void           USBPD_DPM_GetDataInfo(uint8_t port_num, usbpd_core_datainfo_type_t data_id, uint8_t *ptr,
+                                     uint32_t *size);
+void           USBPD_DPM_SetDataInfo(uint8_t port_num, usbpd_core_datainfo_type_t data_id, uint8_t *ptr,
+                                     uint32_t size);
+void           USBPD_DPM_SNK_EvaluateCapabilities(uint8_t port_num, uint32_t *p_request_data,
+                                                  usbpd_core_pdo_type_t *p_pwr_object_type);
+uint32_t       USBPD_DPM_SNK_EvaluateMatchWithSRCPDO(uint8_t port_num, uint32_t src_pdo, uint32_t *p_requested_voltage,
+                                                     uint32_t *p_requested_pwr);
+usbpd_status_t USBPD_DPM_EvaluateVconnSwap(uint8_t port_num);
+usbpd_status_t USBPD_DPM_PE_VconnPwr(uint8_t port_num, usbpd_functional_status_t state);
+void           USBPD_DPM_EnterErrorRecovery(uint8_t port_num);
+usbpd_status_t USBPD_DPM_EvaluateDataRoleSwap(uint8_t port_num);
+usbpd_functional_status_t USBPD_DPM_IsPowerReady(uint8_t port_num, usbpd_vsafe_status_t vsafe);
+
+usbpd_status_t USBPD_DPM_SetupNewPower(uint8_t port_num);
+usbpd_status_t USBPD_DPM_EvaluatePowerRoleSwap(uint8_t port_num);
+usbpd_status_t USBPD_DPM_EvaluateRequest(uint8_t port_num, usbpd_core_pdo_type_t *p_pwr_object);
+void           USBPD_DPM_PowerRoleSwap(uint8_t port_num, usbpd_port_pwr_role_t current_role, usbpd_prs_status_t status);
+
+/**
+  * @}
+  */
+
+/** @addtogroup USBPD_USER_EXPORTED_FUNCTIONS_GROUP3
+  * @{
+  */
+
+usbpd_status_t USBPD_DPM_RequestHardReset(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestCableReset(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestGotoMin(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestPing(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestMessageRequest(uint8_t port_num, uint8_t index_src_pdo, uint16_t voltage_requested);
+usbpd_status_t USBPD_DPM_RequestGetSourceCapability(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestGetSinkCapability(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestDataRoleSwap(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestPowerRoleSwap(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestVconnSwap(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestSoftReset(uint8_t port_num, usbpd_sop_type_t sop_type);
+usbpd_status_t USBPD_DPM_RequestSourceCapability(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestVDM_DiscoveryIdentify(uint8_t port_num, usbpd_sop_type_t sop_type);
+usbpd_status_t USBPD_DPM_RequestVDM_DiscoverySVID(uint8_t port_num, usbpd_sop_type_t sop_type);
+usbpd_status_t USBPD_DPM_RequestVDM_DiscoveryMode(uint8_t port_num, usbpd_sop_type_t sop_type, uint16_t svid);
+usbpd_status_t USBPD_DPM_RequestVDM_EnterMode(uint8_t port_num, usbpd_sop_type_t sop_type, uint16_t svid,
+                                              uint8_t mode_index);
+usbpd_status_t USBPD_DPM_RequestVDM_ExitMode(uint8_t port_num, usbpd_sop_type_t sop_type, uint16_t svid,
+                                             uint8_t mode_index);
+usbpd_status_t USBPD_DPM_RequestDisplayPortStatus(uint8_t port_num, usbpd_sop_type_t sop_type, uint16_t svid,
+                                                  uint32_t *p_dp_status);
+usbpd_status_t USBPD_DPM_RequestDisplayPortConfig(uint8_t port_num, usbpd_sop_type_t sop_type, uint16_t svid,
+                                                  uint32_t *p_dp_config);
+usbpd_status_t USBPD_DPM_RequestAttention(uint8_t port_num, usbpd_sop_type_t sop_type, uint16_t svid);
+usbpd_status_t USBPD_DPM_RequestAlert(uint8_t port_num, usbpd_alert_data_object_t alert);
+usbpd_status_t USBPD_DPM_RequestGetSourceCapabilityExt(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestGetSinkCapabilityExt(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestGetManufacturerInfo(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                                    uint8_t *p_manu_info_data);
+usbpd_status_t USBPD_DPM_RequestGetStatus(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestFastRoleSwap(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestGetPPS_Status(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestGetCountryCodes(uint8_t port_num);
+usbpd_status_t USBPD_DPM_RequestGetCountryInfo(uint8_t port_num, uint16_t country_code);
+usbpd_status_t USBPD_DPM_RequestGetBatteryCapability(uint8_t port_num, uint8_t *p_battery_cap_ref);
+usbpd_status_t USBPD_DPM_RequestGetBatteryStatus(uint8_t port_num, uint8_t *p_battery_status_ref);
+usbpd_status_t USBPD_DPM_RequestSecurityRequest(uint8_t port_num);
+uint32_t       USBPD_DPM_RequestWhatToDo(uint8_t port_num, uint32_t action_id);
+{{else}}
+{{/unless}}
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
+
+#endif /* MX_USBPD_DPM_USER_H */

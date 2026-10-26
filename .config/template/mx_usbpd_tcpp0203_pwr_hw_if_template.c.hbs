@@ -1,0 +1,1345 @@
+/**
+  ******************************************************************************
+  * @file    mx_usbpd_tcpp0203_pwr_hw_if.c
+  * @brief   Power hardware interface module.
+  *          This file provides a set of functions to manage the power hardware
+  *          interface.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025-2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_usbpd_license.md file
+  * in the root directory of this software component.
+  * If no mx_usbpd_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
+#define USBPD_TRACE_VERBOSE_LEVEL     USBPD_TRACE_VERBOSE_LEVEL_INFO /*<! Trace verbosity level for this file. */
+
+/* Includes ------------------------------------------------------------------*/
+#include "usbpd_pwr.h"
+#include "mx_usbpd_tcpp0203_pwr_hw_if.h"
+
+/** @addtogroup STM32_USBPD_LIBRARY
+  * @{
+  */
+
+/** @addtogroup USBPD_PWR_HW_IF
+  * @brief   This file contains PWR hardware interface functions.
+  * @{
+  */
+
+#if !defined (USE_HAL_EXTI_MODULE) || (USE_HAL_EXTI_MODULE != 1)
+#error USE_HAL_EXTI_MODULE is required for this interface
+#endif /* !USE_HAL_EXTI_MODULE */
+
+#if !defined (USE_HAL_EXTI_REGISTER_CALLBACKS) || (USE_HAL_EXTI_REGISTER_CALLBACKS != 1)
+#error USE_HAL_EXTI_REGISTER_CALLBACKS is required for this interface
+#endif /* !USE_HAL_EXTI_REGISTER_CALLBACKS */
+
+/* Private types -----------------------------------------------------------*/
+/** @defgroup USBPD_PWR_HW_IF_Private_Types USBPD_PWR_HW_IF Private Types
+  * @{
+  */
+
+/**
+  * @brief  TCPP component type.
+  */
+typedef enum
+{
+  USBPD_PWR_HW_IF_TCPP_TYPE_NONE   = 0U, /*!< None or unknown TCPP type */
+  USBPD_PWR_HW_IF_TCPP_TYPE_TCPP01 = 1U, /*!< TCPP01 type */
+  USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02 = 2U, /*!< TCPP02 type */
+  USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03 = 3U, /*!< TCPP03 type */
+} usbpd_pwr_hw_if_tcpp_type_t;
+
+/**
+  * @brief  PWR HW IF Handle definition.
+  */
+typedef struct
+{
+  tcpp0203_obj_t              *p_tcpp0203_obj;          /*!< TCPP object                            */
+  usbpd_pwr_hw_if_tcpp_type_t tcpp_type;              /*!< HW component associated to Port        */
+  uint8_t                     flag_initialized;       /*!< Port Context Initialization status     */
+  uint8_t                     flag_enabled;           /*!< Port IT enabled status                 */
+  usbpd_pwr_hw_if_role_t      pwr_role;               /*!< Port current power role (SRC or SNK)   */
+  usbpd_pwr_hw_if_mode_t      pwr_saving_mode;        /*!< Port current power saving mode         */
+  uint32_t                    tick_last_fault;        /*!< Current Tick on last detected fault    */
+  usbpd_pwr_vbusdetect_cb_t   vbus_detect_cb;         /*!< Port callback for VBUS detection event */
+  volatile uint8_t            flag_pwr_event_pending; /*!< Flag to indicate a pending power event */
+} pwr_hw_if_handle_t;
+
+/**
+  * @}
+  */
+
+/* Private constants ---------------------------------------------------------*/
+/** @defgroup USBPD_PWR_HW_IF_Private_Constants USBPD_PWR_HW_IF Private Constants
+  * @{
+  */
+
+#define PWR_HW_IF_FAULT_MIN_TIME_RECOVERY (1000U) /*!< Minimum time between 2 detected faults allowing to consider that
+                                                       fault could be due to a false detection (could be recovered).
+                                                       If 2 faults occurred in less than that duration,
+                                                       no recovery will be executed */
+
+/**
+  * @}
+  */
+
+/* Private macros -------------------------------------------------------------*/
+/** @defgroup USBPD_PWR_HW_IF_Private_Macros USBPD_PWR_HW_IF Private Macros
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private functions ---------------------------------------------------------*/
+/** @defgroup USBPD_PWR_HW_IF_Private_Functions USBPD_PWR_HW_IF Private Functions
+  * @{
+  */
+
+static void PWR_EventCallback(tcpp0203_obj_t *pobj, void *arg);
+
+/**
+  * @}
+  */
+
+/* Private variables ---------------------------------------------------------*/
+/** @defgroup USBPD_PWR_HW_IF_Private_Variables USBPD_PWR_HW_IF Private Variables
+  * @{
+  */
+
+/*< PWR HW IF Handle declaration */
+static pwr_hw_if_handle_t h_pwr_hw_if[USBPD_PORT_COUNT] =
+{
+  {NULL, USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03, 0U, 0U, USBPD_PWR_HW_IF_ROLE_SINK, USBPD_PWR_HW_IF_MODE_OFF, 0U, NULL, 0U},
+};
+
+/**
+  * @}
+  */
+
+/* Exported functions --------------------------------------------------------*/
+/** @addtogroup USBPD_PWR_HW_IF_Exported_Functions
+  * @{
+  */
+
+/**
+  * @brief  Initialize the PWR hardware interface.
+  * @param  port_num Port number.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_Init(uint8_t port_num)
+{
+  usbpd_status_t ret = USBPD_OK;
+  tcpp0203_tcpp_type_t tcpp_type = TCPP0203_DEVICE_TYPE_03;
+
+  USBPD_TRACE_INFO_PRINTF(port_num, "%s", __func__);
+
+{{#if (eq (@root.EnvVarAPI.getVariableValue 'UCPD_DBDIS') true)}}
+  /* Disable STM32 dead battery as it is handled by the TCPP */
+  HAL_PWR_LP_DisableUCPDDeadBattery();
+{{/if}}
+
+  if (HAL_ADC_Start(usbpd_adc_gethandle()) != HAL_OK)
+  {
+    return USBPD_ERROR;
+  }
+
+  if (HAL_ADC_Calibrate(usbpd_adc_gethandle()) != HAL_OK)
+  {
+    return USBPD_ERROR;
+  }
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    ret = USBPD_ERROR;
+  }
+  else
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- Init");
+
+    if (h_pwr_hw_if[port_num].flag_initialized == 0U)
+    {
+      /* Initialisation according to HW configuration type of port */
+      switch (h_pwr_hw_if[port_num].tcpp_type)
+      {
+        case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02:
+        case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03:
+        {
+          /* Set default Role to SNK */
+          h_pwr_hw_if[port_num].pwr_role = USBPD_PWR_HW_IF_ROLE_SINK;
+
+          /* Set default Power Mode to Hibernate */
+          h_pwr_hw_if[port_num].pwr_saving_mode = USBPD_PWR_HW_IF_MODE_HIBERNATE;
+
+          /* Reset port callback for VBUS detection event */
+          h_pwr_hw_if[port_num].vbus_detect_cb = NULL;
+
+          /* Reset last detected fault Tick */
+          h_pwr_hw_if[port_num].tick_last_fault = 0;
+
+          h_pwr_hw_if[port_num].p_tcpp0203_obj = (port_num == (uint8_t)USBPD_PORT_0) ? usbpd_tcpp0203_0_getobject() :
+{{#if (gt usbpd_cxt.interfaces.port.length 1)}}
+#if (USBPD_PORT_COUNT > 1U)
+                                                 usbpd_tcpp0203_1_getobject();
+#else
+                                               NULL;
+#endif /* (USBPD_PORT_COUNT > 1U) */
+{{else}}
+                                               NULL;
+{{/if}}
+          if (tcpp0203_init(h_pwr_hw_if[port_num].p_tcpp0203_obj, port_num) != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+
+          if (tcpp0203_register_cable_plugged_callback(h_pwr_hw_if[port_num].p_tcpp0203_obj,
+                                                     PWR_EventCallback, NULL) != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+
+          if (tcpp0203_enable_it(h_pwr_hw_if[port_num].p_tcpp0203_obj)  != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+
+          /* Read the component type */
+          if (tcpp0203_read_tcpp_type(h_pwr_hw_if[port_num].p_tcpp0203_obj, &tcpp_type) != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+          /* Check the component type */
+          else if ((tcpp_type != TCPP0203_DEVICE_TYPE_02)
+                   && (tcpp_type != TCPP0203_DEVICE_TYPE_03))
+          {
+            ret = USBPD_ERROR;
+          }
+          /* Reset TCPP0203 Reg0 register */
+          else if (tcpp0203_reset(h_pwr_hw_if[port_num].p_tcpp0203_obj) != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+          /* Start the TCPP0203 */
+          else if (tcpp0203_start(h_pwr_hw_if[port_num].p_tcpp0203_obj) != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+          else
+          {
+            /* Update Port Config */
+            switch (tcpp_type)
+            {
+              case TCPP0203_DEVICE_TYPE_02:
+                h_pwr_hw_if[port_num].tcpp_type = USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02;
+                USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- TCPP02 type");
+                break;
+
+              case TCPP0203_DEVICE_TYPE_03:
+                h_pwr_hw_if[port_num].tcpp_type = USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03;
+                USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- TCPP03 type");
+                break;
+
+              default:
+                h_pwr_hw_if[port_num].tcpp_type = USBPD_PWR_HW_IF_TCPP_TYPE_NONE;
+                USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- Unknown type");
+                ret = USBPD_ERROR;
+                break;
+            }
+          }
+          break;
+        }
+
+        case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP01:
+          USBPD_TRACE_INFO_PRINTF(port_num, "TCPP01 not supported with this interface");
+          break;
+        case USBPD_PWR_HW_IF_TCPP_TYPE_NONE:
+        default:
+          USBPD_TRACE_INFO_PRINTF(port_num, "Unknown TCPP. Not supported with this interface");
+          ret = USBPD_ERROR;
+          break;
+      }
+
+      if (ret == USBPD_OK)
+      {
+        /* Set Initialisation flag */
+        h_pwr_hw_if[port_num].flag_initialized = 1U;
+      }
+    }
+  }
+  return ret;
+}
+
+/**
+  * @brief  De-initialize the PWR hardware interface.
+  * @param  port_num Port number.
+  */
+void USBPD_PWR_HW_IF_DeInit(uint8_t port_num)
+{
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    return;
+  }
+  else
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- DeInit");
+
+    /* Deinitialize Power config for port */
+    switch (h_pwr_hw_if[port_num].tcpp_type)
+    {
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03:
+        (void)tcpp0203_deinit(h_pwr_hw_if[port_num].p_tcpp0203_obj);
+        (void)tcpp0203_disable_it(h_pwr_hw_if[port_num].p_tcpp0203_obj);
+        break;
+
+      case USBPD_PWR_HW_IF_TCPP_TYPE_NONE:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP01:
+      default:
+        break;
+    }
+
+    /* Reset Initialisation flag */
+    h_pwr_hw_if[port_num].flag_initialized = 0U;
+  }
+}
+
+/**
+  * @brief  Initialize the VBUS hardware interface.
+  * @param  port_num Port number.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VBUSInit(uint8_t port_num)
+{
+  usbpd_status_t ret;
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    ret = USBPD_ERROR;
+  }
+  else
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- VBUS Init");
+
+    /* Initialize required HW for VBUS management */
+    switch (h_pwr_hw_if[port_num].tcpp_type)
+    {
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03:
+        /* Switch to Normal mode */
+        ret = USBPD_PWR_HW_IF_SetPowerMode(port_num, USBPD_PWR_HW_IF_MODE_NORMAL);
+        break;
+
+      case USBPD_PWR_HW_IF_TCPP_TYPE_NONE:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP01:
+      default:
+        ret = USBPD_ERROR;
+        break;
+    }
+  }
+  return ret;
+}
+
+/**
+  * @brief  De-initialize the VBUS hardware interface.
+  * @param  port_num Port number.
+  */
+void USBPD_PWR_HW_IF_VBUSDeInit(uint8_t port_num)
+{
+  /* Check if instance is valid */
+  if (port_num < (uint8_t)USBPD_PORT_COUNT)
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- VBUS DeInit");
+
+    /* De-Initialize required HW for VBUS management */
+    switch (h_pwr_hw_if[port_num].tcpp_type)
+    {
+    case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02:
+    {
+      if (h_pwr_hw_if[port_num].pwr_role == USBPD_PWR_HW_IF_ROLE_SOURCE)
+      {
+        /* Switch to Low Power mode */
+        (void)USBPD_PWR_HW_IF_SetPowerMode(port_num, USBPD_PWR_HW_IF_MODE_LOWPOWER);
+      }
+      else
+      {
+        /* Switch to Hibernate mode */
+        (void)USBPD_PWR_HW_IF_SetPowerMode(port_num, USBPD_PWR_HW_IF_MODE_HIBERNATE);
+      }
+      break;
+    }
+    case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03:
+    {
+      /* Restore default gates configuration for Low power mode */
+      /* => Close Gate Driver Consumer */
+      if (tcpp0203_set_gate_driver_consumer(h_pwr_hw_if[port_num].p_tcpp0203_obj,
+                                            TCPP0203_GD_CONSUMER_SWITCH_CLOSED) == TCPP0203_OK)
+      {
+        if (h_pwr_hw_if[port_num].pwr_role == USBPD_PWR_HW_IF_ROLE_SOURCE)
+        {
+          /* Switch to Low Power mode */
+          (void)USBPD_PWR_HW_IF_SetPowerMode(port_num, USBPD_PWR_HW_IF_MODE_LOWPOWER);
+        }
+        else
+        {
+          /* Switch to Hibernate mode */
+          (void)USBPD_PWR_HW_IF_SetPowerMode(port_num, USBPD_PWR_HW_IF_MODE_HIBERNATE);
+        }
+      }
+      break;
+    }
+    case USBPD_PWR_HW_IF_TCPP_TYPE_NONE:
+    case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP01:
+    default:
+    break;
+    }
+
+    /* If a PWR event was triggered by interrupt during an active I2C communication with the TCPP,
+    the event will be delayed and executed here */
+    if (h_pwr_hw_if[port_num].flag_pwr_event_pending == 1U)
+    {
+      h_pwr_hw_if[port_num].flag_pwr_event_pending = 0U;
+      h_pwr_hw_if[port_num].p_tcpp0203_obj->pio.phexti->p_trigger_cb(h_pwr_hw_if[port_num].p_tcpp0203_obj->pio.phexti,
+                                                                     HAL_EXTI_TRIGGER_FALLING);
+    }
+  }
+}
+
+/**
+  * @brief  Enable VBUS on a specified port.
+  * @param  port_num Port number.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_EnableVBUS(uint8_t port_num)
+{
+  usbpd_status_t ret = USBPD_OK;
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    ret = USBPD_ERROR;
+  }
+  else
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- VBUS ON");
+
+    switch (h_pwr_hw_if[port_num].tcpp_type)
+    {
+    case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02:
+    {
+      /* Port Role is now SRC : Close Gate Driver Provider */
+      if (h_pwr_hw_if[port_num].pwr_role == USBPD_PWR_HW_IF_ROLE_SOURCE)
+      {
+        HAL_Delay(2);
+
+        if (tcpp0203_set_gate_driver_provider(h_pwr_hw_if[port_num].p_tcpp0203_obj,
+                                              TCPP0203_GD_PROVIDER_SWITCH_CLOSED) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+      }
+      else
+      {
+        ret = USBPD_ERROR;
+      }
+      break;
+    }
+    case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03:
+    {
+      /* Port Role is now SRC : Close Gate Driver Provider */
+      if (h_pwr_hw_if[port_num].pwr_role == USBPD_PWR_HW_IF_ROLE_SOURCE)
+      {
+        if (tcpp0203_set_gate_driver_consumer(h_pwr_hw_if[port_num].p_tcpp0203_obj,
+                                              TCPP0203_GD_CONSUMER_SWITCH_CLOSED) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+        else
+        {
+          HAL_Delay(2);
+
+          if (tcpp0203_set_gate_driver_provider(h_pwr_hw_if[port_num].p_tcpp0203_obj,
+                                                TCPP0203_GD_PROVIDER_SWITCH_CLOSED) != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+        }
+      }
+      else
+      {
+        ret = USBPD_ERROR;
+      }
+      break;
+    }
+    case USBPD_PWR_HW_IF_TCPP_TYPE_NONE:
+    case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP01:
+    default:
+      ret = USBPD_ERROR;
+      break;
+    }
+  }
+  return ret;
+}
+
+/**
+  * @brief  Disable VBUS on a specified port.
+  * @param  port_num Port number.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_DisableVBUS(uint8_t port_num)
+{
+  usbpd_status_t ret = USBPD_OK;
+  uint32_t vbus;
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    ret = USBPD_ERROR;
+  }
+  else
+  {
+    /* Open Gate driver provider */
+    USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- VBUS OFF");
+    if (tcpp0203_set_gate_driver_provider(h_pwr_hw_if[port_num].p_tcpp0203_obj,
+                                        TCPP0203_GD_PROVIDER_SWITCH_OPEN) != TCPP0203_OK)
+    {
+      ret = USBPD_ERROR;
+    }
+    else
+    {
+      /* Set Discharge On */
+      if (tcpp0203_set_vbus_discharge(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VBUS_DISCHARGE_ON) != TCPP0203_OK)
+      {
+        ret = USBPD_ERROR;
+      }
+      else
+      {
+        /* Wait VBUS level becomes lower than USBPD_PWR_LOW_VBUS_THRESHOLD */
+        uint8_t counter = 0;
+
+        vbus = USBPD_PWR_HW_IF_VBUSGetVoltage(port_num);
+
+        while ((vbus >= USBPD_PWR_HW_IF_LOW_VBUS_THRESHOLD) && (counter < 20U))
+        {
+          counter++;
+          HAL_Delay(20U);
+          vbus = USBPD_PWR_HW_IF_VBUSGetVoltage(port_num);
+        }
+
+        HAL_Delay(10U);
+
+        /* Set Discharge Off */
+        if (tcpp0203_set_vbus_discharge(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VBUS_DISCHARGE_OFF) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+/**
+  * @brief  Check if VBUS is enabled on a specified port.
+  * @param  port_num Port number.
+  * @retval USBPD_ENABLE if VBUS is enabled.
+  * @retval USBPD_DISABLE if VBUS is disabled.
+  */
+usbpd_functional_status_t USBPD_PWR_HW_IF_IsEnabledVBUS(uint8_t port_num)
+{
+  tcpp0203_gate_driver_provider_ack_t val = TCPP0203_GD_PROVIDER_SWITCH_ACK_OPEN;
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    return USBPD_DISABLE;
+  }
+  else
+  {
+    if (tcpp0203_get_gate_driver_provider_ack(h_pwr_hw_if[port_num].p_tcpp0203_obj, &val) != TCPP0203_OK)
+    {
+      return USBPD_DISABLE;
+    }
+    else
+    {
+      if (val == TCPP0203_GD_PROVIDER_SWITCH_ACK_OPEN)
+      {
+        return USBPD_DISABLE;
+      }
+      else
+      {
+        return USBPD_ENABLE;
+      }
+    }
+  }
+}
+
+/**
+  * @brief  Initialize VConn hardware interface.
+  * @param  port_num Port number.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VConnInit(uint8_t port_num)
+{
+  usbpd_status_t ret = USBPD_OK;
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    ret = USBPD_ERROR;
+  }
+  else
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- VConn Init");
+
+    /* Initialize required HW for VConn management */
+    switch (h_pwr_hw_if[port_num].tcpp_type)
+    {
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03:
+      {
+        /* Set VConn switch to open */
+        if (tcpp0203_set_vconn_switch(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VCONN_SWITCH_OPEN) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+
+        /* Set VConn discharge to off */
+        if (tcpp0203_set_vconn_discharge(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VCONN_DISCHARGE_OFF) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+        break;
+      }
+      case USBPD_PWR_HW_IF_TCPP_TYPE_NONE:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP01:
+      default:
+        ret = USBPD_ERROR;
+        break;
+    }
+  }
+  return ret;
+}
+
+/**
+  * @brief  De-initialize VConn hardware interface.
+  * @param  port_num Port number.
+  */
+void USBPD_PWR_HW_IF_VConnDeInit(uint8_t port_num)
+{
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    /* Unhandled error */
+  }
+  else
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- VConn DeInit");
+
+    /* Initialize required HW for VConn management */
+    switch (h_pwr_hw_if[port_num].tcpp_type)
+    {
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03:
+      {
+        /* Set VConn switch to open */
+        if (tcpp0203_set_vconn_switch(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VCONN_SWITCH_OPEN) != TCPP0203_OK)
+        {
+          /* Unhandled error */
+        }
+
+        /* Set VConn discharge to off */
+        if (tcpp0203_set_vconn_discharge(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VCONN_DISCHARGE_OFF) != TCPP0203_OK)
+        {
+          /* Unhandled error */
+        }
+        break;
+      }
+      case USBPD_PWR_HW_IF_TCPP_TYPE_NONE:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP01:
+      default:
+        /* Unhandled error */
+        break;
+    }
+  }
+}
+
+/**
+  * @brief  Enable VCONN on a specified port.
+  * @param  port_num Port number.
+  * @param  cc_pin The CC pin.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_EnableVConn(uint8_t port_num, usbpd_cc_line_t cc_pin)
+{
+  usbpd_status_t ret = USBPD_OK;
+
+  /* Check if instance is valid */
+  if ((port_num >= (uint8_t)USBPD_PORT_COUNT) || ((cc_pin != CC1) && (cc_pin != CC2)))
+  {
+    ret = USBPD_ERROR;
+  }
+  else
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- VConn On - CC%d", ((cc_pin == CC1) ? 1 : 2));
+
+    /* Initialize required HW for VConn management */
+    switch (h_pwr_hw_if[port_num].tcpp_type)
+    {
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03:
+      {
+        if (cc_pin == CC1)
+        {
+          if (tcpp0203_set_vconn_switch(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VCONN_SWITCH_CC1) != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+        }
+        else
+        {
+          if (tcpp0203_set_vconn_switch(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VCONN_SWITCH_CC2) != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+        }
+        break;
+      }
+      case USBPD_PWR_HW_IF_TCPP_TYPE_NONE:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP01:
+      default:
+        ret = USBPD_ERROR;
+        break;
+    }
+  }
+  return ret;
+}
+
+/**
+  * @brief  Disable VCONN on a specified port.
+  * @param  port_num Port number.
+  * @param  cc_pin The CC pin.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_DisableVConn(uint8_t port_num, usbpd_cc_line_t cc_pin)
+{
+  usbpd_status_t ret = USBPD_OK;
+
+  (void)cc_pin; /* Unused parameter */
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    ret = USBPD_ERROR;
+  }
+  else
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- VConn Off");
+
+    /* Initialize required HW for VConn management */
+    switch (h_pwr_hw_if[port_num].tcpp_type)
+    {
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP02:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP03:
+      {
+        if (tcpp0203_set_vconn_switch(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VCONN_SWITCH_OPEN) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+        else
+        {
+          /* Discharge VCONN path */
+          if (tcpp0203_set_vconn_discharge(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VCONN_DISCHARGE_ON) != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+          else
+          {
+            /* Wait DISCHARGE is completed then disable VCONN Discharge */
+            HAL_Delay(10U);
+            if (tcpp0203_set_vconn_discharge(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_VCONN_DISCHARGE_OFF) != TCPP0203_OK)
+            {
+              ret = USBPD_ERROR;
+            }
+          }
+        }
+        break;
+      }
+      case USBPD_PWR_HW_IF_TCPP_TYPE_NONE:
+      case USBPD_PWR_HW_IF_TCPP_TYPE_TCPP01:
+      default:
+        ret = USBPD_ERROR;
+        break;
+    }
+  }
+  return ret;
+}
+
+/**
+  * @brief  Check if VCONN is enabled on a specified port.
+  * @param  port_num Port number.
+  * @param  cc_pin The CC pin.
+  * @retval USBPD_ENABLE if VCONN is enabled.
+  * @retval USBPD_DISABLE if VCONN is disabled.
+  */
+usbpd_functional_status_t USBPD_PWR_HW_IF_IsEnabledVConn(uint8_t port_num, usbpd_cc_line_t cc_pin)
+{
+  usbpd_functional_status_t status = USBPD_DISABLE;
+  tcpp0203_vconn_switch_ack_t vconnSwitch = TCPP0203_VCONN_SWITCH_ACK_OPEN;
+
+  /* Check if parameters are valid */
+  if ((port_num >= (uint8_t)USBPD_PORT_COUNT) || ((cc_pin != CC1) && (cc_pin != CC2)))
+  {
+    /* Unhandled error */
+  }
+  else
+  {
+    /* Get TCPP0203 VCONN Switch position */
+    if (tcpp0203_get_vconn_switch_ack(h_pwr_hw_if[port_num].p_tcpp0203_obj, &vconnSwitch) != TCPP0203_OK)
+    {
+      /* Unhandled error */
+    }
+    else
+    {
+      if (((cc_pin == CC1) && (vconnSwitch == TCPP0203_VCONN_SWITCH_ACK_CC1))
+          || ((cc_pin == CC2) && (vconnSwitch == TCPP0203_VCONN_SWITCH_ACK_CC2))
+         )
+      {
+        status = USBPD_ENABLE;
+      }
+    }
+  }
+  return status;
+}
+
+/**
+  * @brief  Get the voltage level on a specified port.
+  * @param  port_num Port number.
+  * @retval The voltage value in mV.
+  */
+uint32_t USBPD_PWR_HW_IF_VBUSGetVoltage(uint8_t port_num)
+{
+  uint32_t voltage = 0;
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    return 0;
+  }
+  else
+  {
+    if (tcpp0203_get_vbus_voltage(h_pwr_hw_if[port_num].p_tcpp0203_obj, &voltage) != TCPP0203_OK)
+    {
+      return 0;
+    }
+    else
+    {
+      return voltage;
+    }
+  }
+}
+
+/**
+  * @brief  Get the current level on a specified port.
+  * @param  port_num Port number.
+  * @retval The current value in mA.
+  */
+int16_t USBPD_PWR_HW_IF_VBUSGetCurrent(uint8_t port_num)
+{
+  /* Left for the user to implement */
+  (void)port_num; /* Unused parameter */
+  return 0;
+}
+
+/**
+  * @brief  Set a fixed PDO and manage the power control.
+  * @param  port_num Port number.
+  * @param  vbus_target_mv The vbus Target (in mV).
+  * @param  operating_current_ma The Operating Current (in mA).
+  * @param  max_operating_current_ma The Max Operating Current (in mA).
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VBUSSetVoltage_Fixed(uint8_t port_num,
+                                                    uint32_t vbus_target_mv,
+                                                    uint32_t operating_current_ma,
+                                                    uint32_t max_operating_current_ma)
+{
+  /* DC-DC converter can be set here if needed to change voltage */
+
+  (void)operating_current_ma; /* Unused parameter */
+  (void)max_operating_current_ma; /* Unused parameter */
+
+  /* Provided as example: only 5V is supported */
+  if (vbus_target_mv == USBPD_PWR_HW_IF_VBUS_5V)
+  {
+    return USBPD_OK;
+  }
+  else
+  {
+    USBPD_TRACE_INFO_PRINTF(port_num, "To be implemented: %s for %umV", __func__, (unsigned int)vbus_target_mv);
+    return USBPD_NOTSUPPORTED;
+  }
+}
+
+/**
+  * @brief  Set a variable PDO and manage the power control.
+  * @param  port_num Port number.
+  * @param  vbus_target_max_mv The vbus Target Max (in mV).
+  * @param  vbus_target_min_mv The vbus Target Min (in mV).
+  * @param  operating_current_ma The Operating Current (in mA).
+  * @param  max_operating_current_ma The Max Operating Current (in mA).
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VBUSSetVoltage_Variable(uint8_t port_num,
+                                                       uint32_t vbus_target_max_mv,
+                                                       uint32_t vbus_target_min_mv,
+                                                       uint32_t operating_current_ma,
+                                                       uint32_t max_operating_current_ma)
+{
+  /* DC-DC converter can be set here if needed to change voltage */
+
+  (void)operating_current_ma; /* Unused parameter */
+  (void)max_operating_current_ma; /* Unused parameter */
+
+  USBPD_TRACE_INFO_PRINTF(port_num, "To be implemented: %s for %umV-%umV", __func__,
+                          (unsigned int)vbus_target_min_mv, (unsigned int)vbus_target_max_mv);
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Set a battery PDO and manage the power control.
+  * @param  port_num Port number.
+  * @param  vbus_target_min_mv The vbus Target Min (in mV).
+  * @param  vbus_target_max_mv The vbus Target Max (in mV).
+  * @param  operating_power_mw The Operating Power (in mW).
+  * @param  max_operating_power_mw The Max Operating Power (in mW).
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VBUSSetVoltage_Battery(uint8_t port_num,
+                                                      uint32_t vbus_target_min_mv,
+                                                      uint32_t vbus_target_max_mv,
+                                                      uint32_t operating_power_mw,
+                                                      uint32_t max_operating_power_mw)
+{
+  /* DC-DC converter can be set here if needed to change voltage */
+
+  (void)operating_power_mw; /* Unused parameter */
+  (void)max_operating_power_mw; /* Unused parameter */
+
+  USBPD_TRACE_INFO_PRINTF(port_num, "To be implemented: %s for %umV-%umV", __func__,
+                          (unsigned int)vbus_target_min_mv, (unsigned int)vbus_target_max_mv);
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Set a APDO and manage the power control.
+  * @param  port_num Port number.
+  * @param  vbus_target_mv The vbus Target (in mV).
+  * @param  operating_current_ma The Operating Current (in mA).
+  * @param  delta_mv The Delta voltage (in mV).
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VBUSSetVoltage_APDO(uint8_t port_num,
+                                                   uint32_t vbus_target_mv,
+                                                   uint32_t operating_current_ma,
+                                                   int32_t  delta_mv)
+{
+  /* DC-DC converter can be set here if needed to change voltage */
+
+  (void)operating_current_ma; /* Unused parameter */
+  (void)delta_mv; /* Unused parameter */
+
+  USBPD_TRACE_INFO_PRINTF(port_num, "To be implemented: %s for %umV", __func__, (unsigned int)vbus_target_mv);
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Assign Power role of Port.
+  * @param  port_num Port number.
+  * @param  Role Type-C port role of type @ref usbpd_pwr_hw_if_role_t.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_SetRole(uint8_t port_num, usbpd_pwr_hw_if_role_t pwr_role)
+{
+  usbpd_status_t ret = USBPD_OK;
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    ret = USBPD_ERROR;
+  }
+  else
+  {
+    switch (pwr_role)
+    {
+      case USBPD_PWR_HW_IF_ROLE_SOURCE:
+      {
+        /* Set port power Role */
+        USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- PWR Role Source");
+        h_pwr_hw_if[port_num].pwr_role = pwr_role;
+
+        /* Ensure that TCPP03 mode is not set to Hibernate */
+        if (h_pwr_hw_if[port_num].pwr_saving_mode == USBPD_PWR_HW_IF_MODE_HIBERNATE)
+        {
+          if (tcpp0203_set_power_mode(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_POWER_MODE_LOWPOWER) != TCPP0203_OK)
+          {
+            ret = USBPD_ERROR;
+          }
+          else
+          {
+            h_pwr_hw_if[port_num].pwr_saving_mode = USBPD_PWR_HW_IF_MODE_LOWPOWER;
+          }
+        }
+        break;
+      }
+
+      case USBPD_PWR_HW_IF_ROLE_SINK:
+        /* Set port power role */
+        USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- PWR Role Sink");
+        h_pwr_hw_if[port_num].pwr_role = pwr_role;
+        break;
+
+      default:
+        ret = USBPD_ERROR;
+        break;
+    }
+  }
+
+  return ret;
+}
+
+/**
+  * @brief  Set operating mode of Port.
+  * @param  port_num Port number.
+  * @param  pwr_mode Type-C port power saving mode of type @ref usbpd_pwr_hw_if_mode_t.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_SetPowerMode(uint8_t port_num, usbpd_pwr_hw_if_mode_t pwr_mode)
+{
+  usbpd_status_t ret = USBPD_OK;
+  tcpp0203_vbus_ok_flag_t flag_vbus_ok = TCPP0203_FLAG_VBUS_OK_RESET;
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    ret = USBPD_ERROR;
+  }
+  else
+  {
+    /* Evaluate requested Power config for port */
+    switch (pwr_mode)
+    {
+      case USBPD_PWR_HW_IF_MODE_OFF:
+      {
+        /* Port must enter OFF mode : Reset TCPP0203 Reg0 */
+        USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- PWR Mode Off");
+        if (tcpp0203_reset(h_pwr_hw_if[port_num].p_tcpp0203_obj) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+        break;
+      }
+
+      case USBPD_PWR_HW_IF_MODE_HIBERNATE:
+      {
+        /** Port Mode is Hibernate : (Default state at startup) suitable for SNK role
+          *   - Dead Batteries Enabled,
+          *   - Gate Driver Consumer controlled by I2C, Gate Driver Provider OFF
+          *   - Waiting for VBUS_OK in FLGn (interrupt)
+          */
+        USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- PWR Mode Hibernate");
+        if (tcpp0203_set_power_mode(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_POWER_MODE_HIBERNATE) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+
+        /* Check if VBUS is present (in case of SNK VBUS powered device) */
+        if (tcpp0203_get_vbus_ok_flag(h_pwr_hw_if[port_num].p_tcpp0203_obj, &flag_vbus_ok) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+        if (flag_vbus_ok == TCPP0203_FLAG_VBUS_OK_SET)
+        {
+          if (h_pwr_hw_if[port_num].vbus_detect_cb != NULL)
+          {
+            /* In case of TCPP03 in Hibernate Mode (SNK config),
+               Mode is set to Low power to enable TCPP03 behavior on CC lines */
+            /* Switch to Low Power mode */
+            USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- PWR Mode LowPower");
+            if (tcpp0203_set_power_mode(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_POWER_MODE_LOWPOWER) != TCPP0203_OK)
+            {
+              ret = USBPD_ERROR;
+            }
+
+            /* Call VBUS detect callback */
+            h_pwr_hw_if[port_num].vbus_detect_cb(port_num, USBPD_PWR_VBUS_CONNECTED);
+          }
+        }
+        break;
+      }
+
+      case USBPD_PWR_HW_IF_MODE_LOWPOWER:
+        /* Port Mode is Low Power : suitable while toggling SNK/SRC is case of DRP
+          *   - Dead Batteries Disabled,
+          *   - Gate Driver Consumer or Provider controlled by I2C
+          *   - Waiting for VBUS_OK in FLGn (interrupt)
+          */
+        USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- PWR Mode LowPower");
+        if (tcpp0203_set_power_mode(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_POWER_MODE_LOWPOWER) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+        break;
+
+      case USBPD_PWR_HW_IF_MODE_NORMAL:
+        /* Port Mode is Normal : No power saving measure (Explicit contract in place) */
+        USBPD_TRACE_INFO_PRINTF(port_num, "TCPP -- PWR Mode Normal");
+        if (tcpp0203_set_power_mode(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_POWER_MODE_NORMAL) != TCPP0203_OK)
+        {
+          ret = USBPD_ERROR;
+        }
+        break;
+
+      default:
+        ret = USBPD_ERROR;
+        break;
+    }
+
+    /* Save power operating mode */
+    h_pwr_hw_if[port_num].pwr_saving_mode = pwr_mode;
+  }
+  return ret;
+}
+
+/**
+  * @brief  Register USB Type-C Current callback function.
+  * @note   Callback function invoked when VBUS rises above 4V (VBUS present) or
+  *         when VBUS falls below programmed threshold (VBUS absent).
+  * @note   Callback function is un-registered when callback function pointer
+  *         argument is NULL.
+  * @param  port_num Port number.
+  * @param  pCallback Callback function pointer of type @ref usbpd_pwr_vbusdetect_cb_t.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_RegisterVBUSDetectCallback(uint8_t port_num,
+                                                          const usbpd_pwr_vbusdetect_cb_t pCallback)
+{
+  usbpd_status_t ret = USBPD_OK;
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    ret = USBPD_ERROR;
+  }
+  else
+  {
+    /* Set port callback for VBUS detection event */
+    h_pwr_hw_if[port_num].vbus_detect_cb = pCallback;
+  }
+  return ret;
+}
+
+/**
+  * @}
+  */
+
+/** @addtogroup USBPD_PWR_HW_IF_Private_Functions USBPD_PWR_HW_IF Private Functions
+  * @{
+  */
+
+/**
+  * @brief  Callback function called when an event is detected on FLGn line.
+  * @param  pobj  : Part object pointer.
+  * @param  arg   : Optional argument given to the callback
+  */
+static void PWR_EventCallback(tcpp0203_obj_t *pobj, void *arg)
+{
+  uint8_t port_num       = 0;
+  tcpp0203_vbus_ok_flag_t vbus_ok_flag   = TCPP0203_FLAG_VBUS_OK_RESET;
+  tcpp0203_ovp_vbus_flag_t ovp_vbus_flag  = TCPP0203_FLAG_OVP_VBUS_RESET;
+  tcpp0203_ovp_cc_flag_t ovp_cc_flag    = TCPP0203_FLAG_OVP_CC_RESET;
+  tcpp0203_otp_flag_t otp_flag       = TCPP0203_FLAG_OTP_RESET;
+  tcpp0203_ocp_vbus_flag_t ocp_vbus_flag  = TCPP0203_FLAG_OCP_VBUS_RESET;
+  tcpp0203_ocp_vconn_flag_t ocp_vconn_flag = TCPP0203_FLAG_OCP_VCONN_RESET;
+  tcpp0203_status_t status = TCPP0203_OK;
+
+  /* Retrieve Port number from Part object pointer */
+  for (uint8_t index = 0; index < (uint8_t)USBPD_PORT_COUNT; index++)
+  {
+    if (h_pwr_hw_if[index].p_tcpp0203_obj == pobj)
+    {
+      port_num = index;
+      break;
+    }
+  }
+
+  if (h_pwr_hw_if[port_num].p_tcpp0203_obj->pio.phi2c->global_state != HAL_I2C_STATE_IDLE)
+  {
+    h_pwr_hw_if[port_num].flag_pwr_event_pending = 1U;
+  }
+  else
+  {
+    /* In case of TCPP0203, this callback could be called when an event is detected
+       on FLGn line */
+    if (h_pwr_hw_if[port_num].flag_initialized == 1U)
+    {
+      /* Read flags status */
+      if (tcpp0203_get_vbus_ok_flag(h_pwr_hw_if[port_num].p_tcpp0203_obj, &vbus_ok_flag) != TCPP0203_OK)
+      {
+        status = TCPP0203_ERROR;
+      }
+      if (tcpp0203_get_ovp_vbus_flag(h_pwr_hw_if[port_num].p_tcpp0203_obj, &ovp_vbus_flag) != TCPP0203_OK)
+      {
+        status = TCPP0203_ERROR;
+      }
+      if (tcpp0203_get_ovp_cc_flag(h_pwr_hw_if[port_num].p_tcpp0203_obj, &ovp_cc_flag) != TCPP0203_OK)
+      {
+        status = TCPP0203_ERROR;
+      }
+      if (tcpp0203_get_otp_flag(h_pwr_hw_if[port_num].p_tcpp0203_obj, &otp_flag) != TCPP0203_OK)
+      {
+        status = TCPP0203_ERROR;
+      }
+      if (tcpp0203_get_ocp_vbus_flag(h_pwr_hw_if[port_num].p_tcpp0203_obj, &ocp_vbus_flag) != TCPP0203_OK)
+      {
+        status = TCPP0203_ERROR;
+      }
+      if (tcpp0203_get_ocp_vconn_flag(h_pwr_hw_if[port_num].p_tcpp0203_obj, &ocp_vconn_flag) != TCPP0203_OK)
+      {
+        status = TCPP0203_ERROR;
+      }
+
+      if (status == TCPP0203_OK)
+      {
+        /* If FLGn has been set to 0 in LOW POWER or HIBERNATE mode, it is expected that a
+           VBUS_OK condition is detected.
+           In this case, if any, VBUS Detection callback could be called */
+        switch (h_pwr_hw_if[port_num].pwr_saving_mode)
+        {
+          case USBPD_PWR_HW_IF_MODE_HIBERNATE:
+          {
+            if (vbus_ok_flag == TCPP0203_FLAG_VBUS_OK_SET)
+            {
+              if (h_pwr_hw_if[port_num].vbus_detect_cb != NULL)
+              {
+                /* In case of TCPP03 in Hibernate Mode (SNK config),
+                   Mode is set to Low power to enable TCPP03 behavior on CC lines */
+                /* Switch to Low Power mode */
+                (void)USBPD_PWR_HW_IF_SetPowerMode(port_num, USBPD_PWR_HW_IF_MODE_LOWPOWER);
+                h_pwr_hw_if[port_num].vbus_detect_cb(port_num, USBPD_PWR_VBUS_CONNECTED);
+              }
+            }
+            else
+            {
+              /* In all other cases (NORMAL mode), FLGn signals fault detection events. */
+              USBPD_TRACE_WARNING_PRINTF(port_num, "TCPP -- Wrong detection");
+            }
+            break;
+          }
+
+          case USBPD_PWR_HW_IF_MODE_LOWPOWER:
+          {
+            if (vbus_ok_flag == TCPP0203_FLAG_VBUS_OK_SET)
+            {
+              if (h_pwr_hw_if[port_num].vbus_detect_cb != NULL)
+              {
+                h_pwr_hw_if[port_num].vbus_detect_cb(port_num, USBPD_PWR_VBUS_CONNECTED);
+              }
+            }
+            else
+            {
+              /* In all other cases (NORMAL mode), FLGn signals fault detection events. */
+              USBPD_TRACE_WARNING_PRINTF(port_num, "TCPP -- Wrong detection");
+            }
+            break;
+          }
+
+          case USBPD_PWR_HW_IF_MODE_NORMAL:
+          {
+            uint32_t tickfault = HAL_GetTick();
+            uint8_t recoveryword;
+
+            /* In all other cases (NORMAL mode), FLGn signals fault detection events. */
+            /* Check type of error raised in FLGn */
+            if (ocp_vconn_flag == TCPP0203_FLAG_OCP_VCONN_SET)
+            {
+              USBPD_TRACE_WARNING_PRINTF(port_num, "TCPP -- OCP VCONN detected");
+            }
+            if (ocp_vbus_flag == TCPP0203_FLAG_OCP_VBUS_SET)
+            {
+              USBPD_TRACE_WARNING_PRINTF(port_num, "TCPP -- OCP VBUS detected");
+
+              /* Check if detected fault could be recovered */
+              /* In case of OCP fault, allow to restart and check if a 2nd OCP fault occurs in a limited time */
+              if ((tickfault > h_pwr_hw_if[port_num].tick_last_fault)
+                  && ((tickfault - h_pwr_hw_if[port_num].tick_last_fault) > PWR_HW_IF_FAULT_MIN_TIME_RECOVERY))
+              {
+                /* Send Recovery word to TCPP0203: GDC and GDP open (TCPP0203_GD_PROVIDER_SWITCH_OPEN is 0) */
+                USBPD_TRACE_WARNING_PRINTF(port_num, "TCPP -- Recovery procedure started");
+
+                recoveryword = (uint8_t)TCPP0203_GD_CONSUMER_SWITCH_OPEN | (uint8_t)TCPP0203_POWER_MODE_NORMAL;
+                (void)tcpp0203_write_ctrl_register(h_pwr_hw_if[port_num].p_tcpp0203_obj, &recoveryword);
+
+                /* In case PWR Role is SRC, try to restore VBUS as soon as possible */
+                if (h_pwr_hw_if[port_num].pwr_role == USBPD_PWR_HW_IF_ROLE_SOURCE)
+                {
+                  (void)tcpp0203_set_power_mode(h_pwr_hw_if[port_num].p_tcpp0203_obj, TCPP0203_POWER_MODE_NORMAL);
+                  (void)tcpp0203_set_gate_driver_provider(h_pwr_hw_if[port_num].p_tcpp0203_obj,
+                                                        TCPP0203_GD_PROVIDER_SWITCH_CLOSED);
+                  USBPD_TRACE_WARNING_PRINTF(port_num, "TCPP -- GDP/GDC settings: SRC (restored)");
+                }
+                else
+                {
+                  if (h_pwr_hw_if[port_num].vbus_detect_cb != NULL)
+                  {
+                    /* Notify Error thanks to callback */
+                    h_pwr_hw_if[port_num].vbus_detect_cb(port_num, USBPD_PWR_VBUS_NOT_CONNECTED);
+                  }
+                }
+              }
+              h_pwr_hw_if[port_num].tick_last_fault = tickfault;
+            }
+            if (ovp_vbus_flag == TCPP0203_FLAG_OVP_VBUS_SET)
+            {
+              USBPD_TRACE_WARNING_PRINTF(port_num, "TCPP -- OVP VBUS detected");
+            }
+            if (otp_flag == TCPP0203_FLAG_OTP_SET)
+            {
+              USBPD_TRACE_WARNING_PRINTF(port_num, "TCPP -- Over temperature detected");
+            }
+            if (ovp_cc_flag == TCPP0203_FLAG_OVP_CC_SET)
+            {
+              USBPD_TRACE_WARNING_PRINTF(port_num, "TCPP -- OVP CC detected");
+            }
+            break;
+          }
+
+          default:
+          {
+            /* Unexpected port state */
+            USBPD_TRACE_WARNING_PRINTF(port_num, "TCPP -- Unexpected State for FLGn event");
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */

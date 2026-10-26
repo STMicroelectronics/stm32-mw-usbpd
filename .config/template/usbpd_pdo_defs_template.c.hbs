@@ -1,0 +1,1623 @@
+{{assign "usbpdFilter" (JSONparse '{"cgroup": "STM32CubeMX2 Config", "csub": "USBPD"}')~}}
+{{assign 'usbpd_context' (@root.SWConfigurationAPI.getInstancesConfiguration @root.usbpdFilter)~}}
+{{assign 'usbpd_cxt' @root.usbpd_context.[0].settings.parameters~}}
+/**
+  ******************************************************************************
+  * @file    usbpd_pdo_defs.c
+  * @brief   USBPD PDO/APDO definition
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025-2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_usbpd_license.md file
+  * in the root directory of this software component.
+  * If no mx_usbpd_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
+/* Includes ------------------------------------------------------------------*/
+#include "usbpd_core.h"
+/* Define   ------------------------------------------------------------------*/
+
+/* Exported variables --------------------------------------------------------*/
+
+/* Definition of Source PDOs */
+uint32_t USBPD_PWR_PDO_ListSRC[USBPD_PORT_COUNT][USBPD_MAX_NB_PDO] =
+{
+{{#if (or (eq usbpd_cxt.interfaces.port.[0].applicative.power_role 'Source') (eq usbpd_cxt.interfaces.port.[0].applicative.power_role 'Dual Role'))}}
+  {
+    /* PDO 1 */
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.first_pdo.voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.first_pdo.max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.first_pdo.peak_current}} /* Peak Current info */
+
+      /* Common definitions applicable to all PDOs, defined only in PDO 1 */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.unchunck_mode}}
+      | USBPD_PDO_SRC_FIXED_UNCHUNK_SUPPORTED /* Unchunked Extended Messages */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_UNCHUNK_NOT_SUPPORTED /* Unchunked Extended Messages */
+{{/if}}
+{{#if (or (eq usbpd_cxt.interfaces.port.[0].applicative.dpm.user.data_role_swap true ) (eq usbpd_cxt.interfaces.port.[0].applicative.dpm.user.data_role_swap_dfp true) (eq usbpd_cxt.interfaces.port.[0].applicative.dpm.user.data_role_swap_ufp true))}}
+      | USBPD_PDO_SRC_FIXED_DRD_SUPPORTED /* Dual-Role Data */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_DRD_NOT_SUPPORTED /* Dual-Role Data */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.usb_communication_capable}}
+      | USBPD_PDO_SRC_FIXED_USBCOMM_SUPPORTED /* USB Communications */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_USBCOMM_NOT_SUPPORTED /* USB Communications */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.Unconstrained_power}}
+      | USBPD_PDO_SRC_FIXED_EXT_POWER_AVAILABLE /* External Power */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_EXT_POWER_NOT_AVAILABLE /* External Power */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.usb_suspend}}
+      | USBPD_PDO_SRC_FIXED_USBSUSPEND_SUPPORTED /* USB Suspend Supported */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_USBSUSPEND_NOT_SUPPORTED /* USB Suspend Supported */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.port_role_swap}}
+      | USBPD_PDO_SRC_FIXED_DRP_SUPPORTED /* Dual-Role Power */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_DRP_NOT_SUPPORTED /* Dual-Role Power */
+{{/if}}
+    ),
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0]}}
+    /* PDO 2 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[0].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 2 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1]}}
+    /* PDO 3 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[1].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 3 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2]}}
+    /* PDO 4 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[2].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 4 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3]}}
+    /* PDO 5 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[3].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 5 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4]}}
+    /* PDO 6 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[4].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 6 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5]}}
+    /* PDO 7 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[0].applicative.source_pdos.pdos.[5].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 7 */ (0x00000000U),
+{{/if}}
+{{#if (gt usbpd_cxt.interfaces.port.length 1)}}
+  },
+  {
+    /* PDO 1 */
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.first_pdo.voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.first_pdo.max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.first_pdo.peak_current}} /* Peak Current info */
+
+      /* Common definitions applicable to all PDOs, defined only in PDO 1 */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.unchunck_mode}}
+      | USBPD_PDO_SRC_FIXED_UNCHUNK_SUPPORTED /* Unchunked Extended Messages */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_UNCHUNK_NOT_SUPPORTED /* Unchunked Extended Messages */
+{{/if}}
+{{#if (or (eq usbpd_cxt.interfaces.port.[1].applicative.dpm.user.data_role_swap true ) (eq usbpd_cxt.interfaces.port.[1].applicative.dpm.user.data_role_swap_dfp true) (eq usbpd_cxt.interfaces.port.[1].applicative.dpm.user.data_role_swap_ufp true))}}
+      | USBPD_PDO_SRC_FIXED_DRD_SUPPORTED /* Dual-Role Data */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_DRD_NOT_SUPPORTED /* Dual-Role Data */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.usb_communication_capable}}
+      | USBPD_PDO_SRC_FIXED_USBCOMM_SUPPORTED /* USB Communications */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_USBCOMM_NOT_SUPPORTED /* USB Communications */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.Unconstrained_power}}
+      | USBPD_PDO_SRC_FIXED_EXT_POWER_AVAILABLE /* External Power */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_EXT_POWER_NOT_AVAILABLE /* External Power */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.usb_suspend}}
+      | USBPD_PDO_SRC_FIXED_USBSUSPEND_SUPPORTED /* USB Suspend Supported */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_USBSUSPEND_NOT_SUPPORTED /* USB Suspend Supported */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.port_role_swap}}
+      | USBPD_PDO_SRC_FIXED_DRP_SUPPORTED /* Dual-Role Power */
+{{else}}
+      | USBPD_PDO_SRC_FIXED_DRP_NOT_SUPPORTED /* Dual-Role Power */
+{{/if}}
+    ),
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0]}}
+    /* PDO 2 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[0].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 2 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1]}}
+    /* PDO 3 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[1].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 3 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2]}}
+    /* PDO 4 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[2].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 4 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3]}}
+    /* PDO 5 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[3].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 5 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4]}}
+    /* PDO 6 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[4].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 6 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5]}}
+    /* PDO 7 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SRC_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SRC_FIXED_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].max_current}}U) /* Max current in mA */
+      | USBPD_PDO_SRC_FIXED_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_BATTERY_SET_MAX_POWER({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].max_pwr}}U)  /* Max Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_VARIABLE_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SRC_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SRC_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].max_current}}U)  /* Max current in mA */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].pwr_limited}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_SET  /* PPS Power Limited bit */
+{{else}}
+      | USBPD_PDO_SRC_APDO_PPS_PWR_LIMITED_CLEAR  /* PPS Power Limited bit */
+{{/if}}
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SRC_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SRC_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SRC_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].max_current_20v}}U) /* Max current in mA  15V-20V range */
+      | USBPD_PDO_SRC_AVSPDO_SPR_PEAKCURRENT_{{usbpd_cxt.interfaces.port.[1].applicative.source_pdos.pdos.[5].peak_current}} /* Peak Current info */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 7 */ (0x00000000U),
+{{/if}}
+{{/if}}
+  }
+{{else}}
+  {
+    /* PDO 1 */ (0x00000000U),
+
+    /* PDO 2 */ (0x00000000U),
+
+    /* PDO 3 */ (0x00000000U),
+
+    /* PDO 4 */ (0x00000000U),
+
+    /* PDO 5 */ (0x00000000U),
+
+    /* PDO 6 */ (0x00000000U),
+
+    /* PDO 7 */ (0x00000000U),
+{{#if (gt usbpd_cxt.interfaces.port.length 1)}}
+  },
+  {
+    /* PDO 1 */ (0x00000000U),
+
+    /* PDO 2 */ (0x00000000U),
+
+    /* PDO 3 */ (0x00000000U),
+
+    /* PDO 4 */ (0x00000000U),
+
+    /* PDO 5 */ (0x00000000U),
+
+    /* PDO 6 */ (0x00000000U),
+
+    /* PDO 7 */ (0x00000000U),
+{{/if}}
+  }
+{{/if}}
+};
+
+/* Definition of Sink PDOs */
+uint32_t USBPD_PWR_PDO_ListSNK[USBPD_PORT_COUNT][USBPD_MAX_NB_PDO] =
+{
+{{#if (or (eq usbpd_cxt.interfaces.port.[0].applicative.power_role 'Sink') (eq usbpd_cxt.interfaces.port.[0].applicative.power_role 'Dual Role'))}}
+  {
+    /* PDO 1 */
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.first_pdo.voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.first_pdo.operational_current}}U) /* Operating current in mA */
+
+      /* Common definitions applicable to all PDOs, defined only in PDO 1 */
+      | USBPD_PDO_SNK_FIXED_FRS_{{usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.fast_role_swap}} /* Fast Role Swap */
+{{#if (or (eq usbpd_cxt.interfaces.port.[0].applicative.dpm.user.data_role_swap true ) (eq usbpd_cxt.interfaces.port.[0].applicative.dpm.user.data_role_swap_dfp true) (eq usbpd_cxt.interfaces.port.[0].applicative.dpm.user.data_role_swap_ufp true))}}
+      | USBPD_PDO_SNK_FIXED_DRD_SUPPORTED /* Dual-Role Data */
+{{else}}
+      | USBPD_PDO_SNK_FIXED_DRD_NOT_SUPPORTED /* Dual-Role Data */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.usb_communication_capable}}
+      | USBPD_PDO_SNK_FIXED_USBCOMM_SUPPORTED /* USB Communications */
+{{else}}
+      | USBPD_PDO_SNK_FIXED_USBCOMM_NOT_SUPPORTED /* USB Communications */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.Unconstrained_power}}
+      | USBPD_PDO_SNK_FIXED_EXT_POWER_AVAILABLE /* External Power */
+{{else}}
+      | USBPD_PDO_SNK_FIXED_EXT_POWER_NOT_AVAILABLE /* External Power */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.Revision_3.higher_capability}}
+      | USBPD_PDO_SNK_FIXED_HIGHERCAPAB_SUPPORTED /* Higher Capability */
+{{else}}
+      | USBPD_PDO_SNK_FIXED_HIGHERCAPAB_NOT_SUPPORTED /* Higher Capability */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.dpm.core.port_role_swap}}
+      | USBPD_PDO_SNK_FIXED_DRP_SUPPORTED /* Dual-Role Power */
+{{else}}
+      | USBPD_PDO_SNK_FIXED_DRP_NOT_SUPPORTED /* Dual-Role Power */
+{{/if}}
+    ),
+{{#if usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].pdo_type}}
+    /* PDO 2 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[0].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 2 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].pdo_type}}
+    /* PDO 3 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[1].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 3 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].pdo_type}}
+    /* PDO 4 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[2].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 4 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].pdo_type}}
+    /* PDO 5 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[3].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 5 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].pdo_type}}
+    /* PDO 6 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[4].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 6 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].pdo_type}}
+    /* PDO 7 */
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[0].applicative.sink_pdos.pdos.[5].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 7 */ (0x00000000U),
+{{/if}}
+{{#if (gt usbpd_cxt.interfaces.port.length 1)}}
+  },
+  {
+    /* PDO 1 */
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.first_pdo.voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.first_pdo.operational_current}}U) /* Operating current in mA */
+
+      /* Common definitions applicable to all PDOs, defined only in PDO 1 */
+      | USBPD_PDO_SNK_FIXED_FRS_{{usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.fast_role_swap}} /* Fast Role Swap */
+{{#if (or (eq usbpd_cxt.interfaces.port.[1].applicative.dpm.user.data_role_swap true ) (eq usbpd_cxt.interfaces.port.[1].applicative.dpm.user.data_role_swap_dfp true) (eq usbpd_cxt.interfaces.port.[1].applicative.dpm.user.data_role_swap_ufp true))}}
+      | USBPD_PDO_SNK_FIXED_DRD_SUPPORTED /* Dual-Role Data */
+{{else}}
+      | USBPD_PDO_SNK_FIXED_DRD_NOT_SUPPORTED /* Dual-Role Data */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.usb_communication_capable}}
+      | USBPD_PDO_SNK_FIXED_USBCOMM_SUPPORTED /* USB Communications */
+{{else}}
+      | USBPD_PDO_SNK_FIXED_USBCOMM_NOT_SUPPORTED /* USB Communications */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.Unconstrained_power}}
+      | USBPD_PDO_SNK_FIXED_EXT_POWER_AVAILABLE /* External Power */
+{{else}}
+      | USBPD_PDO_SNK_FIXED_EXT_POWER_NOT_AVAILABLE /* External Power */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.Revision_3.higher_capability}}
+      | USBPD_PDO_SNK_FIXED_HIGHERCAPAB_SUPPORTED /* Higher Capability */
+{{else}}
+      | USBPD_PDO_SNK_FIXED_HIGHERCAPAB_NOT_SUPPORTED /* Higher Capability */
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.dpm.core.port_role_swap}}
+      | USBPD_PDO_SNK_FIXED_DRP_SUPPORTED /* Dual-Role Power */
+{{else}}
+      | USBPD_PDO_SNK_FIXED_DRP_NOT_SUPPORTED /* Dual-Role Power */
+{{/if}}
+    ),
+{{#if usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].pdo_type}}
+    /* PDO 2 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[0].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 2 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1]}}
+    /* PDO 3 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[1].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 3 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].pdo_type}}
+    /* PDO 4 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[2].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 4 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3]}}
+    /* PDO 5 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[3].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 5 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4]}}
+    /* PDO 6 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[4].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 6 */ (0x00000000U),
+{{/if}}
+{{#if usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5]}}
+    /* PDO 7 */
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].pdo_type 'Fixed Supply')}}
+    (
+      USBPD_PDO_TYPE_FIXED /* Fixed supply PDO */
+
+      | USBPD_PDO_SNK_FIXED_SET_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].voltage}}U) /* Voltage in mV */
+      | USBPD_PDO_SNK_FIXED_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].operational_current}}U) /* Operating current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].pdo_type 'Battery')}}
+    (
+      USBPD_PDO_TYPE_BATTERY /* Battery PDO */
+
+      | USBPD_PDO_SNK_BATTERY_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_BATTERY_SET_OP_POWER({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].operational_pwr}}U)  /* Operational Power in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].pdo_type 'Variable Supply')}}
+    (
+      USBPD_PDO_TYPE_VARIABLE /* Variable supply PDO */
+
+      | USBPD_PDO_SNK_VARIABLE_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_VARIABLE_SET_OP_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].operational_current}}U)  /* Max current in mW */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].pdo_type 'Augmented PDO')}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].apdo_type 'SPR PPS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_APDO_PPS /* SPR PPS */
+      | USBPD_PDO_SNK_APDO_SET_MAX_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].max_voltage}}U) /* Max Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MIN_VOLTAGE({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].min_voltage}}U) /* Min Voltage in mV */
+      | USBPD_PDO_SNK_APDO_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].max_current}}U)  /* Max current in mA */
+    ),
+{{/if}}
+{{#if (eq usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].apdo_type 'SPR AVS')}}
+    (
+      USBPD_PDO_TYPE_APDO /* APDO */
+
+      | USBPD_PDO_SNK_AVSPDO_SPR /* SPR AVS */
+      | USBPD_PDO_SPR_SNK_AVS_15V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].max_current_15v}}U) /* Max current in mA  9V-15V range */
+      | USBPD_PDO_SPR_SNK_AVS_20V_SET_MAX_CURRENT({{usbpd_cxt.interfaces.port.[1].applicative.sink_pdos.pdos.[5].max_current_20v}}U) /* Max current in mA  15V-20V range */
+    ),
+{{/if}}
+{{/if}}
+{{else}}
+
+    /* PDO 7 */ (0x00000000U),
+{{/if}}
+{{/if}}
+  }
+{{else}}
+  {
+    /* PDO 1 */ (0x00000000U),
+
+    /* PDO 2 */ (0x00000000U),
+
+    /* PDO 3 */ (0x00000000U),
+
+    /* PDO 4 */ (0x00000000U),
+
+    /* PDO 5 */ (0x00000000U),
+
+    /* PDO 6 */ (0x00000000U),
+
+    /* PDO 7 */ (0x00000000U),
+{{#if (gt usbpd_cxt.interfaces.port.length 1)}}
+  },
+  {
+    /* PDO 1 */ (0x00000000U),
+
+    /* PDO 2 */ (0x00000000U),
+
+    /* PDO 3 */ (0x00000000U),
+
+    /* PDO 4 */ (0x00000000U),
+
+    /* PDO 5 */ (0x00000000U),
+
+    /* PDO 6 */ (0x00000000U),
+
+    /* PDO 7 */ (0x00000000U),
+{{/if}}
+  }
+{{/if}}
+};

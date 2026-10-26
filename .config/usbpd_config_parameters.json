@@ -1,0 +1,2477 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "version": "0.0.1",
+  "componentid": "::USB:STM32CubeMX2 Config:USBPD",
+  "type": "object",
+  "grammarVersion": "3.9",
+  "properties": {
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "info": {
+          "title": "General information",
+          "type": "object",
+          "properties": {
+            "usbpd_version": {
+              "title": "USBPD version",
+              "type": "string",
+              "default": "0.4.0",
+              "actions": [
+                {
+                  "type": "disable",
+                  "condition": "true",
+                  "message": "USBPD version is fixed and cannot be modified."
+                }
+              ]
+            }
+          }
+        },
+        "profile": {
+          "title": "Profile",
+          "type": "object",
+          "properties": {
+            "stack_library": {
+              "title": "Stack selection",
+              "description": "Choose the stack library.",
+              "type": "string",
+              "oneOf": [
+                {
+                  "title": "Full",
+                  "const": "Full",
+                  "description": "This library provides all power delivery features."
+                },
+                {
+                  "title": "SPR",
+                  "const": "SPR",
+                  "description": "This library excludes EPR and USBDATA power delivery features."
+                },
+                {
+                  "title": "Min SRC",
+                  "const": "Min SRC",
+                  "description": "This library provides minimum features for SRC power delivery, full list of MINSRC lib features in usbpd_def.h."
+                },
+                {
+                  "title": "Min SNK",
+                  "const": "Min SNK",
+                  "description": "This library provides minimum features for SNK power delivery, full list of MINSNK lib features in usbpd_def.h."
+                },
+                {
+                  "title": "Min DRP",
+                  "const": "Min DRP",
+                  "description": "This library provides minimum features for DRP power delivery, full list of MINDRP lib features in usbpd_def.h."
+                },
+                {
+                  "title": "Type C Only",
+                  "const": "Type C Only",
+                  "description": "Excludes all power delivery features."
+                }
+              ],
+              "variables": [
+                {
+                  "on": "update-value",
+                  "name": "USBPD_LIB",
+                  "condition": "$value !== undefined",
+                  "computed_value": "$value"
+                }
+              ],
+              "default": "Full"
+            }
+          }
+        },
+        "core": {
+          "type": "object",
+          "title": "Core",
+          "properties": {
+            "basic": {
+              "type": "object",
+              "title": "Main features",
+              "properties": {
+                "core": {
+                  "type": "object",
+                  "title": "Core",
+                  "properties": {
+                    "trace": {
+                      "title": "Trace",
+                      "description": "Activate USBPD trace, if using with STM32CubeMonitor this requires a UART peripheral with configuration of DMA TX, baud rate of 921600, 8 bit length, stop bit 1, no parity. This action will add a non modifiable trace hardware interface.",
+                      "type": "boolean",
+                      "default": false,
+                      "variables": [
+                        {
+                          "on": "update-value",
+                          "condition": "$value == true",
+                          "name": "USE_TRACE",
+                          "value": true
+                        }
+                      ]
+                    },
+                    "usb_data_support": {
+                      "title": "USB data support",
+                      "description": "This action will generate a modifiable usb interface.",
+                      "type": "boolean",
+                      "variables": [
+                        {
+                          "on": "update-value",
+                          "condition": "$value == true",
+                          "name": "USE_USB_IF",
+                          "value": true
+                        }
+                      ],
+                      "default": false
+                    },
+                    "usbpd_standalone": {
+                      "type": "string",
+                      "description": "Enable standalone  or RTOS mode. RTOS is required with power delivery features, both modes supported with type c only.",
+                      "title": "Select operating system",
+                      "default": "FreeRTOS",
+                      "oneOf": [
+                        {
+                          "title": "No OS",
+                          "const": "No OS",
+                          "actions": [
+                            {
+                              "type": "enable",
+                              "condition": "$profile.stack_library == 'Type C Only'",
+                              "message": "No OS is only supported with Type C Only library."
+                            }
+                          ]
+                        },
+                        {
+                          "title": "FreeRTOS",
+                          "const": "FreeRTOS"
+                        }
+                      ],
+                      "actions": [
+                        {
+                          "type": "error",
+                          "condition": "((!$get('swproject.hasRTOSenabled')) && ($core.basic.core.usbpd_standalone == 'FreeRTOS'))",
+                          "message": "FreeRTOS is mandatory for Power Delivery, enable FreeRTOS in the project."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "applicative": {
+              "title": "Applicative",
+              "type": "object",
+              "properties": {
+                "pe_thread_stack_size": {
+                  "description": "Stack size for pe thread. Typical values are 1024 or 2048.",
+                  "title": "PE thread stack size",
+                  "type": "integer",
+                  "default": 1024,
+                  "minimum": 64,
+                  "maximum": 63999,
+                  "display_format": [
+                    "dec",
+                    "hex"
+                  ],
+                  "actions": [
+                    {
+                      "type": "enable",
+                      "condition": "(($core.basic.core.usbpd_standalone != 'No OS') && ($profile.stack_library != 'Type C Only'))",
+                      "message": "Select FreeRTOS as the operating system to configure this setting, not required with type c only."
+                    }
+                  ]
+                },
+                "pe_thread_priority": {
+                  "description": "Priority value for pe thread.",
+                  "title": "PE thread priority",
+                  "type": "integer",
+                  "default": 4,
+                  "minimum": 0,
+                  "maximum": 31,
+                  "display_format": [
+                    "dec",
+                    "hex"
+                  ],
+                  "actions": [
+                    {
+                      "type": "enable",
+                      "condition": "(($core.basic.core.usbpd_standalone != 'No OS') && ($profile.stack_library != 'Type C Only'))",
+                      "message": "Select FreeRTOS as the operating system to configure this setting, not required with type c only."
+                    }
+                  ]
+                },
+                "cad_thread_stack_size": {
+                  "description": "Stack size for cad thread. Typical values are 1024 or 2048.",
+                  "title": "CAD thread stack size",
+                  "type": "integer",
+                  "default": 1024,
+                  "minimum": 64,
+                  "maximum": 63999,
+                  "display_format": [
+                    "dec",
+                    "hex"
+                  ],
+                  "actions": [
+                    {
+                      "type": "enable",
+                      "condition": "$core.basic.core.usbpd_standalone != 'No OS'",
+                      "message": "Select FreeRTOS as the operating system to configure this setting."
+                    }
+                  ]
+                },
+                "cad_thread_priority": {
+                  "description": "Priority value for cad thread.",
+                  "title": "CAD thread priority",
+                  "type": "integer",
+                  "default": 5,
+                  "minimum": 0,
+                  "maximum": 31,
+                  "display_format": [
+                    "dec",
+                    "hex"
+                  ],
+                  "actions": [
+                    {
+                      "type": "enable",
+                      "condition": "$core.basic.core.usbpd_standalone != 'No OS'",
+                      "message": "Select FreeRTOS as the operating system to configure this setting."
+                    }
+                  ]
+                },
+                "id": {
+                  "title": "USB IF and manufacturer ID",
+                  "type": "object",
+                  "actions": [
+                    {
+                      "type": "include",
+                      "condition": "$profile.stack_library != 'Type C Only'"
+                    }
+                  ],
+                  "properties": {
+                    "vendor_id": {
+                      "type": "integer",
+                      "description": "Vendor ID assigned by USB Implementers Forum.",
+                      "title": "Vendor ID",
+                      "default": 1155,
+                      "minimum": 1,
+                      "maximum": 65535,
+                      "display_format": [
+                        "dec",
+                        "hex"
+                      ]
+                    },
+                    "product_id": {
+                      "type": "integer",
+                      "title": "Product ID",
+                      "description": "Product ID assigned by USB Implementers Forum.",
+                      "default": 2,
+                      "minimum": 1,
+                      "maximum": 65535,
+                      "display_format": [
+                        "dec",
+                        "hex"
+                      ]
+                    },
+                    "xid": {
+                      "type": "integer",
+                      "title": "XID",
+                      "description": "Outward facing identifier used to determine certification status of a PD product.",
+                      "default": 4026531843,
+                      "minimum": 1,
+                      "maximum": 4294967295,
+                      "display_format": [
+                        "dec",
+                        "hex"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "interfaces": {
+          "title": "Interfaces",
+          "type": "object",
+          "properties": {
+            "port": {
+              "title": "Port",
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "strictMaxItems": true,
+              "actions": [
+                {
+                  "type": "set",
+                  "condition": "$get('peripheral.isPhysicallyAvailableInCurrentDevice', 'UCPD2')",
+                  "attributes": {
+                    "maxItems": 2
+                  }
+                }
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "applicative": {
+                    "title": "Applicative",
+                    "type": "object",
+                    "properties": {
+                      "power_role": {
+                        "title": "Power Role",
+                        "description": "Select the USBPD power role.",
+                        "type": "string",
+                        "default": "Sink",
+                        "oneOf": [
+                          {
+                            "title": "Sink",
+                            "const": "Sink",
+                            "actions": [
+                              {
+                                "type": "disable",
+                                "condition": "(($profile.stack_library == 'Min DRP') || ($profile.stack_library == 'Min SRC'))",
+                                "message": "This parameter is not supported with Min DRP or Min SRC libraries choice."
+                              }
+                            ]
+                          },
+                          {
+                            "title": "Source",
+                            "const": "Source",
+                            "actions": [
+                              {
+                                "type": "disable",
+                                "condition": "(($profile.stack_library == 'Min DRP') || ($profile.stack_library == 'Min SNK'))",
+                                "message": "This parameter is not supported with Min DRP or Min SNK libraries choice."
+                              }
+                            ]
+                          },
+                          {
+                            "title": "Dual Role",
+                            "const": "Dual Role",
+                            "actions": [
+                              {
+                                "type": "disable",
+                                "condition": "(($profile.stack_library == 'Min SRC') || ($profile.stack_library == 'Min SNK')|| ($profile.stack_library == 'Type C Only'))",
+                                "message": "This parameter is not supported with Min SRC or Min SNK or Type C only libraries choice."
+                              }
+                            ]
+                          }
+                        ],
+                        "variables": [
+                          {
+                            "on": "update-value",
+                            "name": "USBPD_PWR_ROLE",
+                            "condition": "$value !== undefined",
+                            "computed_value": "$value"
+                          }
+                        ]
+                      },
+                      "dpm": {
+                        "title": "DPM",
+                        "type": "object",
+                        "properties": {
+                          "core": {
+                            "title": "Core",
+                            "type": "object",
+                            "properties": {
+                              "Specification_revision": {
+                                "type": "string",
+                                "title": "Specification Revision",
+                                "default": "Revision 3 (PD3)",
+                                "actions": [
+                                  {
+                                    "type": "include",
+                                    "condition": "$profile.stack_library != 'Type C Only'"
+                                  },
+                                  {
+                                    "type": "disable",
+                                    "condition": "true",
+                                    "message": "Specification version is fixed and cannot be modified."
+                                  }
+                                ]
+                              },
+                              "default_port_role": {
+                                "type": "string",
+                                "title": "Default Port Role",
+                                "description":"Port role and power role must match unless dual role is selected.",
+                                "oneOf": [
+                                  {
+                                    "title": "Source",
+                                    "const": "SRC",
+                                    "actions": [
+                                     {
+                                       "type": "disable",
+                                       "condition": "$item.applicative.power_role == 'Sink'"
+                                     }
+                                    ]
+                                  },
+                                  {
+                                    "title": "Sink",
+                                    "const": "SNK",
+                                    "actions": [
+                                     {
+                                       "type": "disable",
+                                       "condition": "$item.applicative.power_role == 'Source'"
+                                     }
+                                    ]
+                                  }
+                                ],
+                                "actions": [
+                                 {
+                                   "type": "error",
+                                   "condition": "((($item.applicative.power_role == 'Source') && ($item.applicative.dpm.core.default_port_role == 'SNK')) || (($item.applicative.power_role == 'Sink') && ($item.applicative.dpm.core.default_port_role == 'SRC')))",
+                                   "message": "Default port role and power role must match unless dual role is selected as power role ."
+                                 }
+                                ],
+                                "default": "SNK"
+                              },
+                              "port_role_swap": {
+                                "type": "boolean",
+                                "title": "Port Role Swap",
+                                "default": false,
+                                "actions": [
+                                  {
+                                    "type": "include",
+                                    "condition": "$profile.stack_library != 'Type C Only'"
+                                  },
+                                  {
+                                    "type": "enable",
+                                    "condition": "$item.applicative.power_role == 'Dual Role'",
+                                    "message": "Parameter only required when dual role is selected."
+                                  },
+                                  {
+                                    "type": "error",
+                                    "condition": "((($item.applicative.power_role == 'Dual Role') && ($item.applicative.dpm.core.port_role_swap == false)) || (($item.applicative.power_role != 'Dual Role') && ($item.applicative.dpm.core.port_role_swap == true)))",
+                                    "message": "Parameter must be enabled only when dual role is selected."
+                                  }
+                                ]
+                              },
+                              "vendor_defined_messages": {
+                                "type": "boolean",
+                                "title": "Vendor defined messages",
+                                "actions": [
+                                  {
+                                    "type": "include",
+                                    "condition": "$profile.stack_library != 'Type C Only'"
+                                  },
+                                  {
+                                    "type": "enable",
+                                    "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                    "message": "Feature not supported by the selected library"
+                                  }
+                                ],
+                                "variables": [
+                                  {
+                                    "on": "update-value",
+                                    "condition": "$value == true",
+                                    "name": "USE_VDM_USER_APP",
+                                    "value": true
+                                   }
+                                ],
+                                "default": false
+                              },
+                              "discover_identity_response": {
+                                "type": "boolean",
+                                "title": "Discover identity response",
+                                "actions": [
+                                  {
+                                    "type": "include",
+                                    "condition": "$profile.stack_library != 'Type C Only'"
+                                  }
+                                ],
+                                "default": false
+                              },
+                              "discover_identity_sent": {
+                                "type": "boolean",
+                                "title": "Discover identity sent",
+                                "actions": [
+                                  {
+                                    "type": "include",
+                                    "condition": "$profile.stack_library != 'Type C Only'"
+                                  }
+                                ],
+                                "default": false
+                              },
+                              "source_capabilities_counter": {
+                                "type": "boolean",
+                                "title": "Source capabilities counter",
+                                "actions": [
+                                  {
+                                    "type": "include",
+                                    "condition": "$profile.stack_library != 'Type C Only'"
+                                  }
+                                ],
+                                "default": false
+                              },
+                              "Revision_3": {
+                                "title": "Revision 3",
+                                "type": "object",
+                                "description": "Power delivery revision 3 specific features.",
+                                "actions": [
+                                  {
+                                    "type": "include",
+                                    "condition": "$profile.stack_library != 'Type C Only'"
+                                  }
+                                ],
+                                "properties": {
+                                  "unchunck_mode": {
+                                    "type": "boolean",
+                                    "title": "Unchunck mode",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "fast_role_swap": {
+                                    "type": "string",
+                                    "title": "Fast role swap",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "oneOf": [
+                                      {
+                                        "title": "Not supported",
+                                        "const": "NOT_SUPPORTED"
+                                      },
+                                      {
+                                        "title": "Default",
+                                        "const": "DEFAULT"
+                                      },
+                                      {
+                                        "title": "1,5A",
+                                        "const": "1_5A"
+                                      },
+                                      {
+                                        "title": "3A",
+                                        "const": "3A"
+                                      }
+                                    ],
+                                    "default": "NOT_SUPPORTED"
+                                  },
+                                  "higher_capability": {
+                                    "type": "boolean",
+                                    "title": "Higher capability",
+                                    "default": false
+                                  },
+                                  "usb_communication_capable": {
+                                    "type": "boolean",
+                                    "title": "USB communication capable",
+                                    "default": false
+                                  },
+                                  "Unconstrained_power": {
+                                    "type": "boolean",
+                                    "title": "Unconstrained power",
+                                    "default": false
+                                  },
+                                  "usb_suspend": {
+                                    "type": "boolean",
+                                    "title": "USB suspend",
+                                    "default": false
+                                  },
+                                  "pps_status_message": {
+                                    "type": "boolean",
+                                    "title": "PPS status message",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "source_capabilities_extended_message": {
+                                    "type": "boolean",
+                                    "title": "Source capabilities extended message",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "$profile.stack_library != 'Min SNK'",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "alert_message": {
+                                    "type": "boolean",
+                                    "title": "Alert message",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "status_message": {
+                                    "type": "boolean",
+                                    "title": "Status message",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "manufacturer_message": {
+                                    "type": "boolean",
+                                    "title": "Manufacturer message",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "country_codes_message": {
+                                    "type": "boolean",
+                                    "title": "Country codes message",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "country_info_message": {
+                                    "type": "boolean",
+                                    "title": "Country info message",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "security_response_message": {
+                                    "type": "boolean",
+                                    "title": "security response message",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                 "firmware_update_response_message": {
+                                    "type": "boolean",
+                                    "title": "Firmware update response message",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                        "message": "Feature not supported by the selected library"
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "get_battery_capability_status_messages": {
+                                    "type": "boolean",
+                                    "title": "Get battery capability and status messages",
+                                    "default": false
+                                  }
+                                }
+                              },
+                              "cad_detection": {
+                                "title": "CAD detection",
+                                "type": "object",
+                                 "properties": {
+                                  "cad_default_resistor": {
+                                    "type": "string",
+                                    "title": "CAD default resistor",
+                                    "actions": [
+                                      {
+                                        "type": "enable",
+                                        "condition": "(($item.applicative.power_role == 'Source') || ($item.applicative.power_role == 'Dual Role'))",
+                                        "message": "Parameter only supported when power role is source or dual role."
+                                      }
+                                    ],
+                                    "oneOf": [
+                                      {
+                                        "title": "Default USB power",
+                                        "const": "DEFAULT"
+                                      },
+                                      {
+                                         "title": "USB type-C current 1.5A",
+                                         "const": "1A5"
+                                      },
+                                      {
+                                         "title": "USB type-C current 3A",
+                                         "const": "3A0"
+                                      }
+                                    ],
+                                    "default": "DEFAULT"
+                                  },
+                                  "cad_toggle": {
+                                    "type": "boolean",
+                                    "title": "CAD toggle",
+                                    "actions": [
+                                      {
+                                        "type": "include",
+                                        "condition": "$profile.stack_library != 'Type C Only'"
+                                      },
+                                      {
+                                        "type": "enable",
+                                        "condition": "$item.applicative.power_role == 'Dual Role'",
+                                        "message": "Parameter only supported when power role is dual role."
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "cad_try": {
+                                    "type": "boolean",
+                                    "title": "CAD try feature",
+                                    "actions": [
+                                      {
+                                        "type": "include",
+                                        "condition": "$profile.stack_library != 'Type C Only'"
+                                      },
+                                      {
+                                        "type": "enable",
+                                        "condition": "$item.applicative.dpm.core.cad_detection.cad_toggle == true",
+                                        "message": "Parameter only supported when cad toggle is enabled."
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "cad_source_toggle_time": {
+                                    "title": "CAD source toggle time",
+                                    "type": "integer",
+                                    "actions": [
+                                      {
+                                        "type": "include",
+                                        "condition": "$profile.stack_library != 'Type C Only'"
+                                      },
+                                      {
+                                        "type": "enable",
+                                        "condition": "$item.applicative.dpm.core.cad_detection.cad_toggle == true",
+                                        "message": "Parameter only supported when cad toggle is enabled."
+                                      },
+                                      {
+                                        "type": "warning",
+                                        "condition": "(($item.applicative.dpm.core.cad_detection.cad_toggle == true) && ($item.applicative.dpm.core.cad_detection.cad_source_toggle_time == 0))",
+                                        "message": "CAD toggle is enabled. Recommended value is 40."
+                                      }
+                                    ],
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "cad_sink_toggle_time": {
+                                    "title": "CAD sink toggle time",
+                                    "type": "integer",
+                                    "actions": [
+                                      {
+                                        "type": "include",
+                                        "condition": "$profile.stack_library != 'Type C Only'"
+                                      },
+                                      {
+                                        "type": "enable",
+                                        "condition": "$item.applicative.dpm.core.cad_detection.cad_toggle == true",
+                                        "message": "Parameter only supported when cad toggle is enabled."
+                                      },
+                                      {
+                                        "type": "warning",
+                                        "condition": "(($item.applicative.dpm.core.cad_detection.cad_toggle == true) && ($item.applicative.dpm.core.cad_detection.cad_sink_toggle_time == 0))",
+                                        "message": "CAD toggle is enabled. Recommended value is 40."
+                                      }
+                                    ],
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 4294967295,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "cad_accessory": {
+                                    "type": "boolean",
+                                    "title": "CAD accessory",
+                                    "actions": [
+                                      {
+                                        "type": "include",
+                                        "condition": "$profile.stack_library != 'Type C Only'"
+                                      }
+                                    ],
+                                    "default": false
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "user": {
+                            "title": "User",
+                            "type": "object",
+                            "actions": [
+                              {
+                                "type": "include",
+                                "condition": "$profile.stack_library != 'Type C Only'"
+                              }
+                            ],
+                            "properties": {
+                              "data_role_swap": {
+                                "type": "boolean",
+                                "title": "Data Role Swap",
+                                "default": false
+                              },
+                              "vconn_swap": {
+                                "type": "boolean",
+                                "title": "VCONN Swap",
+                                "default": false
+                              },
+                              "data_role_swap_dfp": {
+                                "type": "boolean",
+                                "title": "Data role swap to DFP",
+                                "default": false
+                              },
+                              "data_role_swap_ufp": {
+                                "type": "boolean",
+                                "title": "Data role swap to UFP",
+                                "default": false
+                              },
+                              "sink_requested_pwr": {
+                                "type": "object",
+                                "title": "Sink requested power",
+                                "actions": [
+                                  {
+                                    "type": "include",
+                                    "condition": "(($item.applicative.power_role == 'Sink') || ($item.applicative.power_role == 'Dual Role'))"
+                                  }
+                                ],
+                                "properties": {
+                                  "operating_current_max_1ma_units": {
+                                    "type": "integer",
+                                    "title": "Operating current max 1 mA units",
+                                    "default": 1500,
+                                    "minimum": 1,
+                                    "maximum": 4294967295,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "operating_voltage_1mv_units": {
+                                    "type": "integer",
+                                    "title": "Operating voltage 1 mV units",
+                                    "default": 5000,
+                                    "minimum": 1,
+                                    "maximum": 4294967295,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "operating_voltage_max_1mv_units": {
+                                    "type": "integer",
+                                    "title": "Operating voltage max 1 mV units",
+                                    "default": 5000,
+                                    "minimum": 1,
+                                    "maximum": 4294967295,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "operating_voltage_min_1mv_units": {
+                                    "type": "integer",
+                                    "title": "Operating voltage min 1 mV units",
+                                    "default": 5000,
+                                    "minimum": 1,
+                                    "maximum": 4294967295,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "operating_pwr_1mw_units": {
+                                    "type": "integer",
+                                    "title": "Operating power 1 mW units",
+                                    "default": 7500,
+                                    "minimum": 1,
+                                    "maximum": 4294967295,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "operating_pwr_max_1mw_units": {
+                                    "type": "integer",
+                                    "title": "Operating power max 1 mW units",
+                                    "default": 7500,
+                                    "minimum": 1,
+                                    "maximum": 4294967295,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  }
+                                }
+                              },
+                              "sink_ext_capa": {
+                                "type": "object",
+                                "title": "Sink extended capabilities",
+                                "actions": [
+                                  {
+                                    "type": "include",
+                                    "condition": "(($item.applicative.power_role == 'Sink') || ($item.applicative.power_role == 'Dual Role'))"
+                                  }
+                                ],
+                                "properties": {
+                                  "fw_revision": {
+                                    "type": "integer",
+                                    "title": "Firmware revision",
+                                    "default": 1,
+                                    "minimum": 1,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "hw_revision": {
+                                    "type": "integer",
+                                    "title": "Hardware revision",
+                                    "default": 2,
+                                    "minimum": 1,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "skedb_version": {
+                                    "type": "integer",
+                                    "title": "SKEDB version",
+                                    "default": 1,
+                                    "minimum": 1,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "load_step": {
+                                   "type": "string",
+                                    "title": "Load step",
+                                    "oneOf": [
+                                      {
+                                        "title": "Loadstep 150mA",
+                                        "const": "150MA"
+                                      },
+                                      {
+                                        "title": "Loadstep 500mA",
+                                        "const": "500MA"
+                                      }
+                                    ],
+                                    "default": "150MA"
+                                  },
+                                  "load_charc": {
+                                    "type": "object",
+                                    "title": "Load charactersitics",
+                                    "properties": {
+                                      "percent_overload": {
+                                        "type": "integer",
+                                        "title": "Percent overload",
+                                        "default": 0,
+                                        "minimum": 0,
+                                        "maximum": 65535,
+                                        "display_format": [
+                                          "dec",
+                                          "hex"
+                                        ]
+                                      },
+                                      "overload_period": {
+                                        "type": "integer",
+                                        "title": "Overload period",
+                                        "default": 0,
+                                        "minimum": 0,
+                                        "maximum": 65535,
+                                        "display_format": [
+                                          "dec",
+                                          "hex"
+                                        ]
+                                      },
+                                      "duty_cycle": {
+                                        "type": "integer",
+                                        "title": "Duty cycle",
+                                        "default": 0,
+                                        "minimum": 0,
+                                        "maximum": 65535,
+                                        "display_format": [
+                                          "dec",
+                                          "hex"
+                                        ]
+                                      },
+                                      "vbus_voltage_drop": {
+                                        "type": "integer",
+                                        "title": "VBUS voltage drop",
+                                        "default": 0,
+                                        "minimum": 0,
+                                        "maximum": 65535,
+                                        "display_format": [
+                                          "dec",
+                                          "hex"
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "compliance": {
+                                    "type": "string",
+                                    "title": "Compliance",
+                                    "oneOf": [
+                                      {
+                                        "title": "LPS",
+                                        "const": "LPS"
+                                      },
+                                      {
+                                        "title": "PS1",
+                                        "const": "PS1"
+                                      },
+                                      {
+                                        "title": "PS2",
+                                        "const": "PS2"
+                                      }
+                                    ],
+                                    "default": "LPS"
+                                  },
+                                  "touch_temp": {
+                                    "type": "string",
+                                    "title": "Touch temp",
+                                    "oneOf": [
+                                      {
+                                        "title": "NA",
+                                        "const": "NA"
+                                      },
+                                      {
+                                        "title": "DEFAULT",
+                                        "const": "DEFAULT"
+                                      },
+                                      {
+                                        "title": "TS1",
+                                        "const": "TS1"
+                                      },
+                                      {
+                                        "title": "TS2",
+                                        "const": "TS2"
+                                      }
+                                    ],
+                                    "default": "NA"
+                                  },
+                                  "battery_info": {
+                                    "type": "integer",
+                                    "title": "Battery info",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "sink_modes": {
+                                    "type": "string",
+                                    "title": "Sink modes",
+                                    "oneOf": [
+                                      {
+                                        "title": "PPS",
+                                        "const": "PPS"
+                                      },
+                                      {
+                                        "title": "VBUS",
+                                        "const": "VBUS"
+                                      },
+                                      {
+                                        "title": "MAINS",
+                                        "const": "MAINS"
+                                      },
+                                      {
+                                        "title": "BATPOW",
+                                        "const": "BATPOW"
+                                      },
+                                      {
+                                        "title": "BATNUL",
+                                        "const": "BATNUL"
+                                      },
+                                      {
+                                        "title": "AVS",
+                                        "const": "AVS"
+                                      }
+                                    ],
+                                    "default": "PPS"
+                                  },
+                                  "sink_min_pdp": {
+                                    "type": "integer",
+                                    "title": "Sink min pdp",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "sink_operational_pdp": {
+                                    "type": "integer",
+                                    "title": "Sink operational pdp",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "sink_max_pdp": {
+                                    "type": "integer",
+                                    "title": "Sink max pdp",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  }
+                                }
+                              },
+                              "source_ext_capa": {
+                                "type": "object",
+                                "title": "Source extended capabilities",
+                                "actions": [
+                                  {
+                                    "type": "include",
+                                    "condition": "(($item.applicative.power_role == 'Source') || ($item.applicative.power_role == 'Dual Role'))"
+                                  }
+                                ],
+                                "properties": {
+                                  "fw_revision": {
+                                    "type": "integer",
+                                    "title": "Firmware revision",
+                                    "default": 1,
+                                    "minimum": 1,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "hw_revision": {
+                                    "type": "integer",
+                                    "title": "Hardware revision",
+                                    "default": 2,
+                                    "minimum": 1,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "voltage_regulation": {
+                                    "type": "integer",
+                                    "title": "voltage regulation",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "holdup_time": {
+                                    "type": "integer",
+                                    "title": "Holdup time",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "compliance": {
+                                    "type": "integer",
+                                    "title": "Compliance",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "touch_current": {
+                                    "type": "integer",
+                                    "title": "Touch current",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "peak_current_1": {
+                                    "type": "integer",
+                                    "title": "Peak current 1",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "peak_current_2": {
+                                    "type": "integer",
+                                    "title": "Peak current 2",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "peak_current_3": {
+                                    "type": "integer",
+                                    "title": "Peak current 3",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "touch_temp": {
+                                    "type": "integer",
+                                    "title": "Touch temp",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "source_inputs": {
+                                    "type": "integer",
+                                    "title": "Source inputs",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "batteries_count": {
+                                    "type": "integer",
+                                    "title": "Batteries count",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  },
+                                  "source_pdp": {
+                                    "type": "integer",
+                                    "title": "Source pdp",
+                                    "default": 0,
+                                    "minimum": 0,
+                                    "maximum": 255,
+                                    "display_format": [
+                                      "dec",
+                                      "hex"
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "vdm": {
+                        "title": "VDM",
+                        "type": "object",
+                        "actions": [
+                          {
+                            "type": "include",
+                            "condition": "(($item.applicative.dpm.core.vendor_defined_messages == true)&& ($profile.stack_library != 'Type C Only'))"
+                          }
+                        ],
+                        "properties": {
+                          "modal_operation": {
+                            "type": "boolean",
+                            "title": "Modal operation",
+                            "default": false
+                          },
+                          "bcd_device_sop": {
+                            "type": "integer",
+                            "title": "BCD device SOP",
+                            "default": 43690,
+                            "minimum": 0,
+                            "maximum": 4294967295,
+                            "display_format": [
+                              "dec",
+                              "hex"
+                            ]
+                          },
+                          "usb_host_support": {
+                            "type": "boolean",
+                            "title": "USB host support",
+                            "default": false
+                          },
+                          "usb_device_support": {
+                            "type": "boolean",
+                            "title": "USB device support",
+                            "default": false
+                          },
+                          "product_type": {
+                            "type": "string",
+                            "title": "Product type",
+                            "oneOf": [
+                              {
+                                "title": "Hub",
+                                "const": "HUB"
+                              },
+                              {
+                                "title": "Not UFP",
+                                "const": "NOT_UFP"
+                              },
+                              {
+                                "title": "Peripheral",
+                                "const": "PERIPHERAL"
+                              },
+                              {
+                                "title": "Not DFP",
+                                "const": "NOT_DFP"
+                              },
+                              {
+                                "title": "Host",
+                                "const": "HOST"
+                              },
+                              {
+                                "title": "Power brick",
+                                "const": "POWER_BRICK"
+                              },
+                              {
+                                "title": "Passive cable",
+                                "const": "PASSIVE_CABLE"
+                              },
+                              {
+                                "title": "Active cable",
+                                "const": "ACTIVE_CABLE"
+                              }
+                            ],
+                            "default": "NOT_UFP"
+                          }
+                        }
+                      },
+                      "source_pdos": {
+                        "title": "Source PDOs",
+                        "type": "object",
+                        "actions": [
+                          {
+                            "type": "include",
+                            "condition": "((($item.applicative.power_role == 'Source') || ($item.applicative.power_role == 'Dual Role')) && ($profile.stack_library != 'Type C Only'))"
+                          }
+                        ],
+                        "properties": {
+                          "first_pdo": {
+                            "title": "First PDO",
+                            "type": "object",
+                            "properties": {
+                              "pdo_type": {
+                                "type": "string",
+                                "title": "PDO type",
+                                "actions": [
+                                  {
+                                    "type": "disable",
+                                    "condition": "true",
+                                    "message": "first pdo must be fixed."
+                                  }
+                                ],
+                                "default": "Fixed Supply"
+                              },
+                              "voltage": {
+                                "type": "string",
+                                "title": "Voltage (mV)",
+                                "oneOf": [
+                                  {
+                                    "title": "5000",
+                                    "const": "5000"
+                                  },
+                                  {
+                                    "title": "9000",
+                                    "const": "9000"
+                                  },
+                                  {
+                                    "title": "15000",
+                                    "const": "15000"
+                                  },
+                                  {
+                                    "title": "20000",
+                                    "const": "20000"
+                                  }
+                                ],
+                                "default": "5000"
+                              },
+                              "max_current": {
+                               "type": "integer",
+                                "title": "Max current in mA",
+                                "default": 100,
+                                "minimum": 0,
+                                "maximum": 5000
+                              },
+                              "peak_current": {
+                                "type": "string",
+                                "title": "Peak current",
+                                "oneOf": [
+                                  {
+                                    "title": "Peak equal",
+                                    "const": "EQUAL"
+                                  },
+                                  {
+                                    "title": "Peak over 1",
+                                    "const": "OVER1"
+                                  },
+                                  {
+                                    "title": "Peak over 2",
+                                    "const": "OVER2"
+                                  },
+                                  {
+                                    "title": "Peak over 3",
+                                    "const": "OVER3"
+                                  }
+                                ],
+                                "default": "EQUAL"
+                              },
+                              "Common": {
+                                "type": "object",
+                                "title": "Common",
+                                "properties": {
+                                  "unchunked_extended_message_support": {
+                                    "type": "boolean",
+                                    "readOnly": true,
+                                    "title": "Unchunked extended message support",
+                                    "description": "This parameter takes the value of unchunk mode parameter available in the revision 3 features.",
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "$item.applicative.dpm.core.Revision_3.unchunck_mode == true ",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "dual_role_data": {
+                                    "type": "boolean",
+                                    "title": "Dual role data",
+                                    "description": "This parameter takes the value of data role swap dfp or data role swap ufp or data role swap parameters available in the user features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "(($item.applicative.dpm.user.data_role_swap_dfp == true) || ($item.applicative.dpm.user.data_role_swap_ufp == true) || ($item.applicative.dpm.user.data_role_swap == true)) ",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "usb_communication_capable": {
+                                    "type": "boolean",
+                                    "title": "USB communication capable",
+                                    "description": "This parameter takes the value of USB communication capable parameter available in the revision 3 features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "$item.applicative.dpm.core.Revision_3.usb_communication_capable == true ",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "unconstrained_power": {
+                                    "type": "boolean",
+                                    "title": "Unconstrained power",
+                                    "description": "This parameter takes the value of unconstrained power parameter available in the revision 3 features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "$item.applicative.dpm.core.Revision_3.Unconstrained_power == true ",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "usb_suspend": {
+                                    "type": "boolean",
+                                    "title": "USB suspend",
+                                    "description": "This parameter takes the value of USB suspend parameter available in the revision 3 features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "$item.applicative.dpm.core.Revision_3.usb_suspend == true ",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "dual_role_power": {
+                                    "type": "boolean",
+                                    "title": "Dual role power",
+                                    "description": "This parameter takes the value of port role swap parameter available in the DPM core features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "$item.applicative.dpm.core.port_role_swap == true",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "pdos": {
+                            "type": "array",
+                            "title": "PDOs",
+                            "minItems": 0,
+                            "maxItems": 6,
+                            "strictMaxItems": true,
+                             "items": {
+                              "type": "object",
+                              "properties": {
+                                "pdo_type": {
+                                  "type": "string",
+                                  "title": "PDO type",
+                                  "oneOf": [
+                                    {
+                                      "title": "Fixed Supply",
+                                      "const": "Fixed Supply"
+                                    },
+                                    {
+                                      "title": "Battery",
+                                      "const": "Battery"
+                                    },
+                                    {
+                                      "title": "Variable Supply",
+                                      "const": "Variable Supply"
+                                    },
+                                    {
+                                      "title": "Augmented PDO",
+                                      "const": "Augmented PDO",
+                                      "actions": [
+                                        {
+                                          "type": "enable",
+                                          "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                          "message": "Feature not supported by the selected library."
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  "default": "Fixed Supply"
+                                },
+                                "apdo_type": {
+                                  "type": "string",
+                                  "title": "APDO type",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "$item.pdo_type == 'Augmented PDO'"
+                                    }
+                                  ],
+                                  "oneOf": [
+                                    {
+                                      "title": "SPR PPS",
+                                      "const": "SPR PPS"
+                                    },
+                                    {
+                                      "title": "SPR AVS",
+                                      "const": "SPR AVS"
+                                    }
+                                  ],
+                                  "default": "SPR PPS"
+                                },
+                                "voltage": {
+                                  "type": "string",
+                                  "title": "Voltage in mV",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "$item.pdo_type == 'Fixed Supply'"
+                                    }
+                                  ],
+                                  "oneOf": [
+                                    {
+                                      "title": "5000",
+                                      "const": "5000"
+                                    },
+                                    {
+                                      "title": "9000",
+                                      "const": "9000"
+                                    },
+                                    {
+                                      "title": "15000",
+                                      "const": "15000"
+                                    },
+                                    {
+                                      "title": "20000",
+                                      "const": "20000"
+                                    }
+                                  ],
+                                  "default": "5000"
+                                },
+                                "max_current": {
+                                  "type": "integer",
+                                  "title": "Max current in mA",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Fixed Supply') || ($item.pdo_type == 'Variable Supply') || (($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR PPS')))"
+                                    }
+                                  ],
+                                  "default": 100,
+                                  "minimum": 0,
+                                  "maximum": 5000
+                                },
+                                "peak_current": {
+                                  "type": "string",
+                                  "title": "Peak current",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Fixed Supply') || (($item.pdo_type == 'Augmented PDO') &&($item.apdo_type == 'SPR AVS')))"
+                                    }
+                                  ],
+                                  "oneOf": [
+                                    {
+                                      "title": "Peak equal",
+                                      "const": "EQUAL"
+                                    },
+                                    {
+                                      "title": "Peak over 1",
+                                      "const": "OVER1"
+                                    },
+                                    {
+                                      "title": "Peak over 2",
+                                      "const": "OVER2"
+                                    },
+                                    {
+                                      "title": "Peak over 3",
+                                      "const": "OVER3"
+                                    }
+                                  ],
+                                  "default": "EQUAL"
+                                },
+                                "max_voltage": {
+                                  "type": "integer",
+                                  "title": "Max Voltage in mV",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Battery') || ($item.pdo_type == 'Variable Supply') || (($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR PPS')))"
+                                    }
+                                  ],
+                                  "default": 5000,
+                                  "minimum": 3300,
+                                  "maximum": 21000
+                                },
+                                "min_voltage": {
+                                  "type": "integer",
+                                  "title": "Min Voltage in mV",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Battery') || ($item.pdo_type == 'Variable Supply') || (($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR PPS')))"
+                                    }
+                                  ],
+                                  "default": 5000,
+                                  "minimum": 3300,
+                                  "maximum": 21000
+                                },
+                                "max_pwr": {
+                                  "type": "integer",
+                                  "title": "Max power in mW",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "$item.pdo_type == 'Battery'"
+                                    }
+                                  ],
+                                  "default": 500,
+                                  "minimum": 500,
+                                  "maximum": 100000
+                                },
+                                "pwr_limited": {
+                                  "type": "boolean",
+                                  "title": "power limited",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR PPS'))"
+                                    }
+                                  ],
+                                  "default": false
+                                },
+                                "max_current_15v": {
+                                  "type": "integer",
+                                  "title": "Max current 15V",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR AVS'))"
+                                    }
+                                  ],
+                                  "default": 100,
+                                  "minimum": 0,
+                                  "maximum": 5000
+                                },
+                                "max_current_20v": {
+                                  "type": "integer",
+                                  "title": "Max current 20V",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR AVS'))"
+                                    }
+                                  ],
+                                  "default": 100,
+                                  "minimum": 0,
+                                  "maximum": 5000
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "sink_pdos": {
+                        "title": "Sink PDOs",
+                        "type": "object",
+                        "actions": [
+                          {
+                            "type": "include",
+                            "condition": "((($item.applicative.power_role == 'Sink') || ($item.applicative.power_role == 'Dual Role')) && ($profile.stack_library != 'Type C Only'))"
+                          }
+                        ],
+                        "properties": {
+                          "first_pdo": {
+                            "title": "First PDO",
+                            "type": "object",
+                            "properties": {
+                              "pdo_type": {
+                                "type": "string",
+                                "title": "PDO type",
+                                "actions": [
+                                  {
+                                    "type": "disable",
+                                    "condition": "true",
+                                    "message": "first pdo must be fixed."
+                                  }
+                                ],
+                                "default": "Fixed Supply"
+                              },
+                              "voltage": {
+                                "type": "string",
+                                "title": "Voltage in mV",
+                                "oneOf": [
+                                  {
+                                    "title": "5000",
+                                    "const": "5000"
+                                  },
+                                  {
+                                    "title": "9000",
+                                    "const": "9000"
+                                  },
+                                  {
+                                    "title": "15000",
+                                    "const": "15000"
+                                  },
+                                  {
+                                    "title": "20000",
+                                    "const": "20000"
+                                  }
+                                ],
+                                "default": "5000"
+                              },
+                              "operational_current": {
+                                "type": "integer",
+                                "title": "Operational current in mA",
+                                "default": 100,
+                                "minimum": 0,
+                                "maximum": 5000
+                              },
+                              "Common": {
+                                "type": "object",
+                                "title": "Common",
+                                "properties": {
+                                  "fast_role_swap": {
+                                    "type": "boolean",
+                                    "title": "Fast role swap",
+                                    "description": "This parameter takes the value of fast role swap parameter available in the revision 3 features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "$item.applicative.dpm.core.Revision_3.fast_role_swap != 'NOT_SUPPORTED' ",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "dual_role_data": {
+                                    "type": "boolean",
+                                    "title": "Dual role data",
+                                    "description": "This parameter takes the value of data role swap ufp or data role swap dfp or data role swap parameters available in the user features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "(($item.applicative.dpm.user.data_role_swap_dfp == true) || ($item.applicative.dpm.user.data_role_swap_ufp == true) || ($item.applicative.dpm.user.data_role_swap == true)) ",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "usb_communication_capable": {
+                                    "type": "boolean",
+                                    "title": "USB communication capable",
+                                    "description": "This parameter takes the value of USB communication capable parameter available in the revision 3 features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "$item.applicative.dpm.core.Revision_3.usb_communication_capable == true ",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "unconstrained_power": {
+                                    "type": "boolean",
+                                    "title": "Unconstrained power",
+                                    "description": "This parameter takes the value of unconstrained power parameter available in the revision 3 features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "$item.applicative.dpm.core.Revision_3.Unconstrained_power == true ",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "higher_capability": {
+                                    "type": "boolean",
+                                    "title": "Higher capability",
+                                    "description": "This parameter takes the value of higher capability parameter available in the revision 3 features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "$item.applicative.dpm.core.Revision_3.higher_capability == true ",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  },
+                                  "dual_role_power": {
+                                    "type": "boolean",
+                                    "title": "Dual role power",
+                                    "description": "This parameter takes the value of port role swap parameter available in the DPM core features.",
+                                    "readOnly": true,
+                                    "actions": [
+                                      {
+                                        "type": "set",
+                                        "condition": "$item.applicative.dpm.core.port_role_swap == true",
+                                        "attributes": {
+                                          "value": true
+                                        }
+                                      }
+                                    ],
+                                    "default": false
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "pdos": {
+                            "type": "array",
+                            "title": "PDOs",
+                            "minItems": 0,
+                            "maxItems": 6,
+                            "strictMaxItems": true,
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "pdo_type": {
+                                  "type": "string",
+                                  "title": "PDO type",
+                                  "oneOf": [
+                                    {
+                                      "title": "Fixed Supply",
+                                      "const": "Fixed Supply"
+                                    },
+                                    {
+                                      "title": "Battery",
+                                      "const": "Battery"
+                                    },
+                                    {
+                                      "title": "Variable Supply",
+                                      "const": "Variable Supply"
+                                    },
+                                    {
+                                      "title": "Augmented PDO",
+                                      "const": "Augmented PDO",
+                                      "actions": [
+                                        {
+                                          "type": "enable",
+                                          "condition": "(($profile.stack_library == 'Full') || ($profile.stack_library == 'SPR'))",
+                                          "message": "Feature not supported by the selected library."
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  "default": "Fixed Supply"
+                                },
+                                "apdo_type": {
+                                  "type": "string",
+                                  "title": "APDO type",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "$item.pdo_type == 'Augmented PDO'"
+                                    }
+                                  ],
+                                  "oneOf": [
+                                    {
+                                      "title": "SPR PPS",
+                                      "const": "SPR PPS"
+                                    },
+                                    {
+                                      "title": "SPR AVS",
+                                      "const": "SPR AVS"
+                                    }
+                                  ],
+                                  "default": "SPR PPS"
+                                },
+                                "voltage": {
+                                  "type": "string",
+                                  "title": "Voltage in mV",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "$item.pdo_type == 'Fixed Supply'"
+                                    }
+                                  ],
+                                  "oneOf": [
+                                    {
+                                      "title": "5000",
+                                      "const": "5000"
+                                    },
+                                    {
+                                      "title": "9000",
+                                      "const": "9000"
+                                    },
+                                    {
+                                      "title": "15000",
+                                      "const": "15000"
+                                    },
+                                    {
+                                      "title": "20000",
+                                      "const": "20000"
+                                    }
+                                  ],
+                                  "default": "5000"
+                                },
+                                "operational_current": {
+                                  "type": "integer",
+                                  "title": "Operational current in mA",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Fixed Supply') || ($item.pdo_type == 'Variable Supply'))"
+                                    }
+                                  ],
+                                  "default": 100,
+                                  "minimum": 0,
+                                  "maximum": 5000
+                                },
+                                "max_voltage": {
+                                  "type": "integer",
+                                  "title": "Max Voltage in mV",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Battery') || ($item.pdo_type == 'Variable Supply') || (($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR PPS')))"
+                                    }
+                                  ],
+                                  "default": 5000,
+                                  "minimum": 3300,
+                                  "maximum": 21000
+                                },
+                                "min_voltage": {
+                                  "type": "integer",
+                                  "title": "Min Voltage in mV",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Battery') || ($item.pdo_type == 'Variable Supply') || (($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR PPS')))"
+                                    }
+                                  ],
+                                  "default": 5000,
+                                  "minimum": 3300,
+                                  "maximum": 21000
+                                },
+                                "operational_pwr": {
+                                  "type": "integer",
+                                  "title": "Operational power in mW",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "$item.pdo_type == 'Battery'"
+                                    }
+                                  ],
+                                  "default": 0,
+                                  "minimum": 0,
+                                  "maximum": 100000
+                                },
+                                "max_current": {
+                                  "type": "integer",
+                                  "title": "Max current",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR PPS'))"
+                                    }
+                                  ],
+                                  "default": 0,
+                                  "minimum": 0,
+                                  "maximum": 5000
+                                },
+                                "max_current_15v": {
+                                  "type": "integer",
+                                  "title": "Max current 15V",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR AVS'))"
+                                    }
+                                  ],
+                                  "default": 100,
+                                  "minimum": 0,
+                                  "maximum": 5000
+                               },
+                                "max_current_20v": {
+                                  "type": "integer",
+                                  "title": "Max current 20V",
+                                  "actions": [
+                                    {
+                                      "type": "include",
+                                      "condition": "(($item.pdo_type == 'Augmented PDO') && ($item.apdo_type == 'SPR AVS'))"
+                                    }
+                                  ],
+                                  "default": 100,
+                                  "minimum": 0,
+                                  "maximum": 5000
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "phy_if": {
+                    "title": "PHY interface",
+                    "type": "object",
+                    "properties": {
+                      "hw_resources_allocation": {
+                        "title": "HW resources allocation",
+                        "type": "object",
+                        "properties": {
+                          "ucpd_instance": {
+                            "title": "UCPD instance",
+                            "type": "object",
+                            "actions": [
+                              {
+                                "type": "error",
+                                "condition": "!$item.phy_if.hw_resources_allocation.ucpd_instance?.selection",
+                                "message": "Please select an UCPD instance."
+                              },
+                              {
+                                "type": "error",
+                                "condition": "$item.phy_if.hw_resources_allocation.ucpd_instance?.selection && $get('sw-config.peripheral-parameter-value', $item.phy_if.hw_resources_allocation.ucpd_instance.selection, 'info/layer') !== 'HAL'",
+                                "message": "The selected UCPD instance must use the HAL layer."
+                              },
+                              {
+                                "type": "error",
+                                "condition": "$item.phy_if.hw_resources_allocation.ucpd_instance?.selection && $get('sw-config.project-component-parameter-value', 'HALCore', 'ucpd_feature/use_register_callback') !== true",
+                                "message": "Use register callback must be enabled in the CORE panel for HAL UCPD."
+                              },
+                              {
+                                "type": "error",
+                                "condition": "$item.phy_if.hw_resources_allocation.ucpd_instance?.selection && $get('sw-config.project-component-parameter-value', 'HALCore', 'ucpd_feature/get_last_errors') !== true",
+                                "message": "Get last errors must be enabled in the CORE panel for HAL UCPD."
+                              },
+                              {
+                                "type": "error",
+                                "condition": "$item.phy_if.hw_resources_allocation.ucpd_instance?.selection && $get('sw-config.project-component-parameter-value', 'HALCore', 'ucpd_feature/use_hal_ucpd_power_delivery') !== true && $profile.stack_library != 'Type C Only'",
+                                "message": "Use power delivery related functionalities must be enabled in the CORE panel for HAL UCPD."
+                              }
+                            ],
+                            "objectType": "bind.peripheral.config",
+                            "description": "Choose the UCPD peripheral instance.",
+                            "criteria": {
+                              "peripheralType": [
+                                "usbpd"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "pwr_if": {
+                    "title": "PWR interface",
+                    "type": "object",
+                    "properties": {
+                      "select_pwr_if": {
+                        "title": "PWR interface",
+                        "type": "string",
+                        "actions": [
+                          {
+                            "type": "error",
+                            "condition": "$item.pwr_if.select_pwr_if == ''",
+                            "message": "Please select a power interface type."
+                          }
+                        ],
+                        "oneOf": [
+                          {
+                            "title": "Custom",
+                            "const": "Custom"
+                          },
+                          {
+                            "title": "Tcpp01",
+                            "const": "Tcpp01"
+                          },
+                          {
+                            "title": "Tcpp02",
+                            "const": "Tcpp02"
+                          },
+                          {
+                            "title": "Tcpp03",
+                            "const": "Tcpp03"
+                          },
+                          {
+                            "title": "",
+                            "const": ""
+                          }
+                        ],
+                        "variables": [
+                          {
+                            "on": "update-value",
+                            "condition": "$value !== undefined",
+                            "name": "CHOOSE_PWR_IF",
+                            "computed_value": "$value"
+                          }
+                        ],
+                        "default": ""
+                      },
+                      "sw_resources_allocation": {
+                        "title": "SW resources allocation",
+                        "type": "object",
+                        "actions": [
+                          {
+                            "type": "include",
+                            "condition": "$item.pwr_if.select_pwr_if == 'Tcpp01' || $item.pwr_if.select_pwr_if == 'Tcpp02'|| $item.pwr_if.select_pwr_if == 'Tcpp03'"
+                          }
+                        ],
+                        "properties": {
+                          "tcpp_selection": {
+                            "title": "TCPP board part selection",
+                            "type": "string",
+                            "actions": [
+                              {
+                                "type": "error",
+                                "condition": "$item.pwr_if.sw_resources_allocation.tcpp_selection == ''",
+                                "message": "Please select a tcpp board part."
+                              }
+                            ],
+                            "oneOf": [
+                              {
+                                "const": "TCPP01",
+                                "title": "TCPP01",
+                                "actions": [
+                                  {
+                                    "type": "enable",
+                                    "condition": "$get('swproject.hasComponent', 'STMicroelectronics::Board Part:STM32CubeMX2 Config:TCPP01') && $item.pwr_if.select_pwr_if == 'Tcpp01'",
+                                    "message": "Add the TCPP01 board part component and select the matching PWR interface type."
+                                  }
+                                ]
+                              },
+                              {
+                                "const": "TCPP0203",
+                                "title": "TCPP0203",
+                                "actions": [
+                                  {
+                                    "type": "enable",
+                                    "condition": "$get('swproject.hasComponent', 'STMicroelectronics::Board Part:STM32CubeMX2 Config:TCPP0203') && (($item.pwr_if.select_pwr_if == 'Tcpp02')|| ($item.pwr_if.select_pwr_if == 'Tcpp03'))",
+                                    "message": "Add the TCPP0203 board part component and select the matching PWR interface type."
+                                 }
+                                ]
+                              },
+                              {
+                                "title": "",
+                                "const": ""
+                              }
+                            ],
+                            "default": ""
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "use_timerserver": {
+              "title": "Timerserver",
+              "type": "object",
+                  "actions": [
+                    {
+                      "type": "include",
+                      "condition": "$profile.stack_library != 'Type C Only'"
+                    }
+                  ],
+              "properties": {
+                "tim_if_microseconds": {
+                  "title": "Timings in microseconds",
+                  "type": "string",
+                  "description":"The recommended timer configuration is in polling mode, counter mode up, prescaler and period values configured to have 10 ms output frequency.",
+                  "default": "Timer",
+                  "actions": [
+                    {
+                      "type": "disable",
+                      "condition": "true",
+                      "message": "TIM perihperal is mandatory to manage timings in microseconds."
+                    }
+                  ]
+                },
+                "tim_if_milliseconds": {
+                  "title": "Timings in milliseconds",
+                  "type": "string",
+                  "description":"The recommended timer configuration is in interrupt mode, counter mode up, prescaler and period values configured to have 1 ms output frequency.",
+                  "default": "HAL timebase",
+                  "oneOf": [
+                    {
+                      "const": "HAL timebase",
+                      "title": "HAL timebase"
+                    },
+                    {
+                      "const": "Timer",
+                      "title": "Timer"
+                    }
+                  ],
+                  "variables": [
+                   {
+                     "on": "update-value",
+                     "name": "USBPD_TIMERSERVER",
+                     "condition": "$value !== undefined",
+                     "computed_value": "$value"
+                   }
+                 ]
+                },
+                "hw_resources_allocation": {
+                  "title": "HW resources allocation",
+                  "type": "object",
+                  "actions": [
+                    {
+                      "type": "include",
+                      "condition": "$profile.stack_library != 'Type C Only'"
+                    }
+                  ],
+                  "properties": {
+                    "tim_instance_microseconds": {
+                      "title": "TIM instance microseconds",
+                      "type": "object",
+                      "actions": [
+                        {
+                          "type": "include",
+                          "condition": "$profile.stack_library != 'Type C Only'"
+                        },
+                        {
+                          "type": "error",
+                          "condition": "!$interfaces.use_timerserver.hw_resources_allocation.tim_instance_microseconds?.selection",
+                          "message": "Please select a TIM instance for microseconds timings management."
+                        },
+                        {
+                          "type": "error",
+                          "condition": "$interfaces.use_timerserver.hw_resources_allocation.tim_instance_microseconds?.selection && $get('sw-config.peripheral-parameter-value', $interfaces.use_timerserver.hw_resources_allocation.tim_instance_microseconds.selection, 'info/layer') !== 'HAL'",
+                          "message": "The selected TIM instance must use the HAL layer."
+                        }
+                      ],
+                      "objectType": "bind.peripheral.config",
+                      "description": "Choose the TIM peripheral instance to manage timings in microseconds.",
+                      "criteria": {
+                        "peripheralType": [
+                          "tim"
+                        ]
+                      }
+                    },
+                    "tim_instance_milliseconds": {
+                      "title": "TIM instance milliseconds",
+                      "type": "object",
+                      "actions": [
+                        {
+                          "type": "include",
+                          "condition": "(($interfaces.use_timerserver.tim_if_milliseconds == 'Timer') && ($profile.stack_library != 'Type C Only'))"
+                        },
+                        {
+                          "type": "error",
+                          "condition": "!$interfaces.use_timerserver.hw_resources_allocation.tim_instance_milliseconds?.selection",
+                          "message": "Please select a TIM instance for milliseconds timings management."
+                        },
+                        {
+                          "type": "error",
+                          "condition": "$interfaces.use_timerserver.hw_resources_allocation.tim_instance_milliseconds?.selection && $get('sw-config.peripheral-parameter-value', $interfaces.use_timerserver.hw_resources_allocation.tim_instance_milliseconds.selection, 'info/layer') !== 'HAL'",
+                          "message": "The selected TIM instance must use the HAL layer."
+                        },
+                        {
+                          "type": "error",
+                          "condition": "$interfaces.use_timerserver.hw_resources_allocation.tim_instance_milliseconds?.selection && $get('sw-config.peripheral-parameter-value', $interfaces.use_timerserver.hw_resources_allocation.tim_instance_milliseconds.selection, 'system/nvic/enable_interruption_global') !== true",
+                          "message": "Interrupt is mandatory for the selected TIM instance."
+                        },
+                        {
+                          "type": "error",
+                          "condition": "$interfaces.use_timerserver.hw_resources_allocation.tim_instance_milliseconds?.selection && $get('sw-config.project-component-parameter-value', 'HALCore', 'tim_feature/use_register_callback') !== true",
+                          "message": "Use register callback must be enabled in the CORE panel for HAL TIM."
+                        }
+                      ],
+                      "objectType": "bind.peripheral.config",
+                      "description": "Choose the TIM peripheral instance to manage timings in milliseconds.",
+                      "criteria": {
+                        "peripheralType": [
+                          "tim"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "use_trace": {
+              "title": "Trace",
+              "type": "object",
+              "actions": [
+                {
+                  "type": "include",
+                  "condition": "$core.basic.core.trace == true"
+                }
+              ],
+              "properties": {
+                "hw_resources_allocation": {
+                  "title": "HW resources allocation",
+                  "type": "object",
+                  "properties": {
+                    "uart_instance": {
+                      "title": "UART instance",
+                      "type": "object",
+                      "actions": [
+                        {
+                          "type": "error",
+                          "condition": "!$interfaces.use_trace.hw_resources_allocation.uart_instance?.selection",
+                          "message": "Please select a UART instance."
+                        },
+                        {
+                          "type": "error",
+                          "condition": "$interfaces.use_trace.hw_resources_allocation.uart_instance?.selection && $get('sw-config.peripheral-parameter-value', $interfaces.use_trace.hw_resources_allocation.uart_instance.selection, 'info/layer') !== 'HAL'",
+                          "message": "The selected UART instance must use the HAL layer."
+                        },
+                        {
+                          "type": "error",
+                          "condition": "$interfaces.use_trace.hw_resources_allocation.uart_instance?.selection && $get('sw-config.peripheral-parameter-value', $interfaces.use_trace.hw_resources_allocation.uart_instance.selection, 'info/function_type') !== 'UART'",
+                          "message": "The selected UART instance must use the UART function."
+                        },
+                        {
+                          "type": "error",
+                          "condition": "$interfaces.use_trace.hw_resources_allocation.uart_instance?.selection && $get('sw-config.project-component-parameter-value', 'HALCore', 'uart_feature/use_register_callback') !== true",
+                          "message": "Use register callback must be enabled in the CORE panel for HAL UART."
+                        },
+                        {
+                          "type": "error",
+                          "condition": "$interfaces.use_trace.hw_resources_allocation.uart_instance?.selection && $get('sw-config.project-component-parameter-value', 'HALCore', 'uart_feature/get_last_errors') !== true",
+                          "message": "Get last errors must be enabled in the CORE panel for HAL UART."
+                        },
+                        {
+                          "type": "error",
+                          "condition": "$interfaces.use_trace.hw_resources_allocation.uart_instance?.selection && $get('sw-config.peripheral-parameter-value', $interfaces.use_trace.hw_resources_allocation.uart_instance.selection, 'system/dma/enable_dma_tx') !== true",
+                          "message": "The selected UART instance must have DMA Tx enabled."
+                        }
+                      ],
+                      "objectType": "bind.peripheral.config",
+                      "description": "Choose the UART peripheral instance.",
+                      "criteria": {
+                        "peripheralType": [
+                          "usart",
+                          "uart",
+                          "lpuart"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:stm32="https://developer.st.com/schemas/stm32cube/1.0.0" schemaVersion="1.7.55" xsi:noNamespaceSchemaLocation="PACK.xsd" xsi:schemaLocation="https://developer.st.com/schemas/stm32cube/1.0.0 stm32cube.xsd" Dvendor="STMicroelectronics:13" Dname="STM32*">
+  <vendor>STMicroelectronics</vendor>
+  <name>usbpd</name>
+  <environments>
+    <environment name="STM32Cube">
+      <stm32:pack type="MW" friendlyName="usbpd" shortDesc="usbpd middleware">
+        <relocation-info parent="middleware" layer="" element=""/>
+        <compatibility>
+          <release version="2.0.0">
+            <applicable-schema schemaType="sw-configuration" schemaVersion="3.8.0"/>
+            <applicable-api-group apiType="codegen-getters">
+              <applicable-api apiType="SWProjectAPI" apiVersion="1.0.0"/>
+            </applicable-api-group>
+          </release>
+        </compatibility>
+      </stm32:pack>
+    </environment>
+  </environments>
+  <ECCN>
+    <ECCN-EU>NEC</ECCN-EU>
+    <ECCN-US>EAR99</ECCN-US>
+  </ECCN>
+  <description>STMicroelectronics usbpd pack</description>
+  <repository type="git">https://github.com/STMicroelectronics/stm32-mw-usbpd/</repository>
+  <url>https://developer.st.com/st-pack-server/api/v1/pack/</url>
+  <license>LICENSE.md</license>
+  <releases>
+    <release date="2026-09-07" version="2.0.0">
+      USBPD pack version V2.0.0
+      ## Main changes
+      * Official release of USBPD aligned with HAL2.
+    </release>
+  </releases>
+  <changelogs>
+    <changelog id="Readme" name="README.md"/>
+    <changelog id="Release Notes" default="true" name="Release_Notes.html"/>
+  </changelogs>
+  <keywords>
+    <keyword>Cortex-M</keyword>
+    <keyword>STMicroelectronics</keyword>
+    <keyword>USBPD</keyword>
+    <keyword>STM32</keyword>
+  </keywords>
+  <taxonomy>
+    <description Cclass="USB">USB</description>
+  </taxonomy>
+  <conditions>
+    <condition id="ARMCC GCC IAR">
+      <accept Tcompiler="ARMCC"/>
+      <accept Tcompiler="GCC"/>
+      <accept Tcompiler="IAR"/>
+    </condition>
+    <condition id="M0PLUS">
+      <require condition="ARMCC GCC IAR"/>
+      <require Dvendor="STMicroelectronics:13" Dcore="Cortex-M0+"/>
+    </condition>
+    <condition id="M7">
+      <require condition="ARMCC GCC IAR"/>
+      <require Dvendor="STMicroelectronics:13" Dcore="Cortex-M7"/>
+    </condition>
+    <condition id="M33">
+      <require condition="ARMCC GCC IAR"/>
+      <require Dvendor="STMicroelectronics:13" Dcore="Cortex-M33"/>
+    </condition>
+    <condition id="M55">
+      <require condition="ARMCC GCC IAR"/>
+      <require Dvendor="STMicroelectronics:13" Dcore="Cortex-M55"/>
+    </condition>
+    <condition id="M85">
+      <require condition="ARMCC GCC IAR"/>
+      <require Dvendor="STMicroelectronics:13" Dcore="Cortex-M85"/>
+    </condition>
+    <condition id="usbpd core condition">
+      <description>USBPD Core dependency</description>
+      <require Cclass="USB" Cgroup="USBPD" Csub="Core"/>
+      <require condition="usbpd lib condition"/>
+      <require condition="usbpd utils tracer condition"/>
+      <require condition="usbpd utils monitor condition"/>
+      <require condition="Use TCPP01 pwr if"/>
+      <require condition="Use TCPP0203 pwr if"/>
+      <require condition="Use custom pwr if"/>
+      <require condition="Use usb if"/>
+      <require condition="Use vdm user app"/>
+      <require Cclass="USB" Cgroup="USBPD Interface" Csub="phy"/>
+    </condition>
+    <condition id="usbpd lib condition">
+      <description>USBPD Lib dependency</description>
+    </condition>
+    <condition id="usbpd utils tracer condition">
+      <description>USBPD Utils tracer dependency</description>
+    </condition>
+    <condition id="usbpd utils monitor condition">
+      <description>USBPD Utils monitor dependency</description>
+    </condition>
+    <condition id="Use TCPP01 pwr if">
+      <description>Use TCPP01 pwr if dependency</description>
+    </condition>
+    <condition id="Use TCPP0203 pwr if">
+      <description>Use TCPP03 pwr if dependency</description>
+    </condition>
+    <condition id="Use custom pwr if">
+      <description>Use custom pwr if dependency</description>
+    </condition>
+    <condition id="Use usb if">
+      <description>Use usb if dependency</description>
+    </condition>
+    <condition id="Use vdm user app">
+      <description>Use vdm user app dependency</description>
+    </condition>
+    <condition id="usbpd ucpd peripheral condition">
+      <description>USBPD UCPD interface dependency</description>
+      <require Cclass="Device" Cgroup="STM32 HAL" Csub="UCPD"/>
+    </condition>
+    <condition id="usbpd tim peripheral condition">
+      <description>USBPD TIM interface dependency</description>
+      <require Cclass="Device" Cgroup="STM32 HAL" Csub="TIM"/>
+    </condition>
+    <condition id="usbpd uart peripheral condition">
+      <description>USBPD UART interface dependency</description>
+      <require Cclass="Device" Cgroup="STM32 HAL" Csub="UART"/>
+    </condition>
+  </conditions>
+  <generators>
+    <!-- This generator is launched if any component referencing this generator by 'id' is selected and the specified <gpdsc> file does not exist -->
+    <generator id="usbpd_mx2codegen">
+      <description>STMicroelectronics: STM32 Cube Code Generator for USBPD Pack</description>
+      <exe>
+        <command host="win">.config/gen_code.bat</command>
+        <command host="linux">.config/gen_code.sh</command>
+        <command host="mac">.config/gen_code.sh</command>
+        <!-- #name of the gpdsc template contained in this PACK and aligned with GPDSC name-->
+        <argument>STMicroelectronics.usbpd.gpdsc.hbs</argument>
+        <!-- passing the generator name-->
+        <argument>usbpd_mx2codegen</argument>
+        <argument>$G</argument>
+        <!-- Flag to indicate that this Generator is dry-run capable -->
+        <argument mode="dry-run">--dry-run</argument>
+      </exe>
+      <!-- workingDir></workingDir -->
+      <!-- path is specified either absolute or relative to PDSC or GPDSC file. If not specified it is the project directory configured by the environment -->
+      <gpdsc name="$P/STMicroelectronics.usbpd.gpdsc"/>
+    </generator>
+  </generators>
+  <components>
+    <!-- USBPD Common Core -->
+    <component Cclass="USB" Cgroup="USBPD" Csub="Core" condition="usbpd lib condition" Cversion="2.0.0">
+      <description>USBPD Common Core</description>
+      <files>
+        <file category="doc" name="Release_Notes.md"/>
+        <file category="doc" name="Release_Notes.html"/>
+        <file category="doc" name="SW_Security_Level.md"/>
+        <file category="doc" name="README.md"/>
+        <!-- USBPD Core files -->
+        <file category="source" name="common/core/usbpd_phy.c"/>
+        <file category="source" name="common/core/usbpd_pwr.c"/>
+        <file category="source" name="common/core/usbpd_trace.c"/>
+        <file category="include" name="common/core/"/>
+      </files>
+    </component>
+    <!-- USBPD Core timerserver -->
+    <component Cclass="USB" Cgroup="USBPD" Csub="Core timerserver" Cversion="2.0.0">
+      <description>USBPD Core timerserver</description>
+      <files>
+        <file category="doc" name="Release_Notes.md"/>
+        <file category="doc" name="Release_Notes.html"/>
+        <file category="doc" name="SW_Security_Level.md"/>
+        <file category="doc" name="README.md"/>
+        <!-- USBPD Core timerserver files -->
+        <file category="source" name="common/core/usbpd_timersserver.c"/>
+        <file category="include" name="common/core/"/>
+      </files>
+    </component>
+    <!-- STM32 USBPD Common lib FULL -->
+    <component Cclass="USB" Cgroup="USBPD" Csub="Lib" Cvariant="USBPD_PD3FULL" Cversion="2.0.0">
+      <description>USB Common Lib Full</description>
+      <files>
+        <!-- USBPD lib files -->
+        <file category="library" name="common/lib/USBPD_LIB_FULL_CM0PLUS_wc32.a" condition="M0PLUS"/>
+        <file category="library" name="common/lib/USBPD_LIB_FULL_CM7_wc32.a" condition="M7"/>
+        <file category="library" name="common/lib/USBPD_LIB_FULL_CM33_wc32.a" condition="M33"/>
+        <file category="library" name="common/lib/USBPD_LIB_FULL_CM55_wc32.a" condition="M55"/>
+        <file category="library" name="common/lib/USBPD_LIB_FULL_CM85_wc32.a" condition="M85"/>
+      </files>
+    </component>
+    <!-- STM32 USBPD Common lib MINDRP -->
+    <component Cclass="USB" Cgroup="USBPD" Csub="Lib" Cvariant="USBPD_PD3MINDRP" Cversion="2.0.0">
+      <description>USB Common Lib MinDRP</description>
+      <files>
+        <!-- USBPD lib files -->
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINDRP_CM0PLUS_wc32.a" condition="M0PLUS"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINDRP_CM7_wc32.a" condition="M7"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINDRP_CM33_wc32.a" condition="M33"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINDRP_CM55_wc32.a" condition="M55"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINDRP_CM85_wc32.a" condition="M85"/>
+      </files>
+    </component>
+    <!-- STM32 USBPD Common lib MINSRC -->
+    <component Cclass="USB" Cgroup="USBPD" Csub="Lib" Cvariant="USBPD_PD3MINSRC" Cversion="2.0.0">
+      <description>USB Common Lib MinSRC</description>
+      <files>
+        <!-- USBPD lib files -->
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINSRC_CM0PLUS_wc32.a" condition="M0PLUS"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINSRC_CM7_wc32.a" condition="M7"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINSRC_CM33_wc32.a" condition="M33"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINSRC_CM55_wc32.a" condition="M55"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINSRC_CM85_wc32.a" condition="M85"/>
+      </files>
+    </component>
+    <!-- STM32 USBPD Common lib MINSNK -->
+    <component Cclass="USB" Cgroup="USBPD" Csub="Lib" Cvariant="USBPD_PD3MINSNK" Cversion="2.0.0">
+      <description>USB Common Lib MinSNK</description>
+      <files>
+        <!-- USBPD lib files -->
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINSNK_CM0PLUS_wc32.a" condition="M0PLUS"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINSNK_CM7_wc32.a" condition="M7"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINSNK_CM33_wc32.a" condition="M33"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINSNK_CM55_wc32.a" condition="M55"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_MINSNK_CM85_wc32.a" condition="M85"/>
+      </files>
+    </component>
+    <!-- STM32 USBPD Common lib SPR -->
+    <component Cclass="USB" Cgroup="USBPD" Csub="Lib" Cvariant="USBPD_PD3SPR" Cversion="2.0.0">
+      <description>USB Common Lib SPR</description>
+      <files>
+        <!-- USBPD lib files -->
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_SPR_CM0PLUS_wc32.a" condition="M0PLUS"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_SPR_CM7_wc32.a" condition="M7"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_SPR_CM33_wc32.a" condition="M33"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_SPR_CM55_wc32.a" condition="M55"/>
+        <file category="library" name="common/lib/USBPD_LIB_CONFIG_SPR_CM85_wc32.a" condition="M85"/>
+      </files>
+    </component>
+    <!-- STM32 USBPD Common lib TYPEC -->
+    <component Cclass="USB" Cgroup="USBPD" Csub="Lib" Cvariant="USBPD_PD3TYPEC" Cversion="2.0.0">
+      <description>USB Common Lib TypeC</description>
+      <files>
+        <!-- USBPD lib files -->
+        <file category="library" name="common/lib/USBPD_LIB_NO_PD_CM0PLUS_wc32.a" condition="M0PLUS"/>
+        <file category="library" name="common/lib/USBPD_LIB_NO_PD_CM7_wc32.a" condition="M7"/>
+        <file category="library" name="common/lib/USBPD_LIB_NO_PD_CM33_wc32.a" condition="M33"/>
+        <file category="library" name="common/lib/USBPD_LIB_NO_PD_CM55_wc32.a" condition="M55"/>
+        <file category="library" name="common/lib/USBPD_LIB_NO_PD_CM85_wc32.a" condition="M85"/>
+      </files>
+    </component>
+    <!-- STM32 USBPD Core Utils -->
+    <!-- TRACER -->
+    <component Cclass="USB" Cgroup="USBPD" Csub="Utils tracer" condition="usbpd utils tracer condition" Cversion="2.0.0">
+      <description>USB Common Utils</description>
+      <files>
+        <file category="source" name="common/utils/tracer/usbpd_utils_tracer.c"/>
+        <file category="include" name="common/utils/tracer/"/>
+      </files>
+    </component>
+    <!-- MONITOR -->
+    <component Cclass="USB" Cgroup="USBPD" Csub="Utils monitor" condition="usbpd utils monitor condition" Cversion="2.0.0">
+      <description>USB Common Utils</description>
+      <files>
+        <file category="source" name="common/utils/monitor/usbpd_utils_monitor.c"/>
+        <file category="source" name="common/utils/monitor/usbpd_utils_monitor_tlv.c"/>
+        <file category="include" name="common/utils/monitor/"/>
+      </files>
+    </component>
+    <!-- STM32 USBPD Interfaces -->
+    <!-- PHY interface -->
+    <component Cclass="USB" Cgroup="USBPD Interface" Csub="phy" condition="usbpd ucpd peripheral condition" Cversion="2.0.0">
+      <description>USBPD interface phy</description>
+      <files>
+        <file category="source" name="interfaces/phy/usbpd_phy_hw_if.c"/>
+        <file category="source" name="interfaces/phy/usbpd_cad_hw_if.c"/>
+        <file category="include" name="interfaces/phy/"/>
+      </files>
+    </component>
+    <!-- Trace interface -->
+    <component Cclass="USB" Cgroup="USBPD Interface" Csub="trace" condition="usbpd uart peripheral condition" Cversion="2.0.0">
+      <description>USBPD interface trace</description>
+      <files>
+        <file category="source" name="interfaces/trace/usbpd_utils_tracer_hw_if.c"/>
+        <file category="include" name="interfaces/trace/"/>
+      </files>
+    </component>
+    <!-- Timerserver interface -->
+    <component Cclass="USB" Cgroup="USBPD Interface" Csub="timerserver" condition="usbpd tim peripheral condition" Cversion="2.0.0">
+      <description>USBPD interface timerserver</description>
+      <files>
+        <file category="source" name="interfaces/timerserver/usbpd_timerserver_hw_if.c"/>
+        <file category="include" name="interfaces/timerserver/"/>
+      </files>
+    </component>
+    <!-- mx_usbpd_tcpp01_pwr_hw_if -->
+    <component generator="usbpd_mx2codegen" Cclass="USB" Cgroup="STM32CubeMX2 Codegen" Csub="pwr_tcpp01_if" Cversion="2.0.0" condition="Use TCPP01 pwr if">
+      <description>USBPD interface pwr for TCPP01.</description>
+      <files>
+        <file category="genAsset" name=".config/template/mx_usbpd_tcpp01_pwr_hw_if_template.c.hbs"/>
+        <file category="genAsset" name=".config/template/mx_usbpd_tcpp01_pwr_hw_if_template.h.hbs"/>
+        <!-- License files -->
+        <file category="genAsset" name=".config/template/partials/LICENSE_partial.hbs"/>
+        <file category="genAsset" name=".config/template/license/mx_usbpd_license_template.md.hbs"/>
+      </files>
+    </component>
+    <!-- mx_usbpd_tcpp0203_pwr_hw_if -->
+    <component generator="usbpd_mx2codegen" Cclass="USB" Cgroup="STM32CubeMX2 Codegen" Csub="pwr_tcpp0203_if" Cversion="2.0.0" condition="Use TCPP0203 pwr if">
+      <description>USBPD interface pwr for TCPP0203.</description>
+      <files>
+        <file category="genAsset" name=".config/template/mx_usbpd_tcpp0203_pwr_hw_if_template.c.hbs"/>
+        <file category="genAsset" name=".config/template/mx_usbpd_tcpp0203_pwr_hw_if_template.h.hbs"/>
+        <!-- License files -->
+        <file category="genAsset" name=".config/template/partials/LICENSE_partial.hbs"/>
+        <file category="genAsset" name=".config/template/license/mx_usbpd_license_template.md.hbs"/>
+      </files>
+    </component>
+    <!-- mx_usbpd_custom_pwr_hw_if -->
+    <component generator="usbpd_mx2codegen" Cclass="USB" Cgroup="STM32CubeMX2 Codegen" Csub="pwr_custom_if" Cversion="2.0.0" condition="Use custom pwr if">
+      <description>USBPD custom pwr interface.</description>
+      <files>
+        <file category="genAsset" name=".config/template/mx_usbpd_custom_pwr_hw_if_template.c.hbs"/>
+        <file category="genAsset" name=".config/template/mx_usbpd_custom_pwr_hw_if_template.h.hbs"/>
+        <!-- License files -->
+        <file category="genAsset" name=".config/template/partials/LICENSE_partial.hbs"/>
+        <file category="genAsset" name=".config/template/license/mx_usbpd_license_template.md.hbs"/>
+      </files>
+    </component>
+    <!-- usbpd_utils_monitor_hw_if -->
+    <component generator="usbpd_mx2codegen" Cclass="USB" Cgroup="STM32CubeMX2 Codegen" Csub="utils_monitor_if" Cversion="2.0.0">
+      <description>USBPD utils monitor interface.</description>
+      <files>
+        <file category="genAsset" name=".config/template/mx_usbpd_utils_monitor_hw_if_template.c.hbs"/>
+        <file category="genAsset" name=".config/template/mx_usbpd_utils_monitor_hw_if_template.h.hbs"/>
+        <!-- License files -->
+        <file category="genAsset" name=".config/template/partials/LICENSE_partial.hbs"/>
+        <file category="genAsset" name=".config/template/license/mx_usbpd_license_template.md.hbs"/>
+      </files>
+    </component>
+    <!-- mx_usbpd_usb_if -->
+    <component generator="usbpd_mx2codegen" Cclass="USB" Cgroup="STM32CubeMX2 Codegen" Csub="usb_if" Cversion="2.0.0" condition="Use usb if">
+      <description>USBPD usb interface.</description>
+      <files>
+        <file category="genAsset" name=".config/template/mx_usbpd_usb_if_template.c.hbs"/>
+        <file category="genAsset" name=".config/template/mx_usbpd_usb_if_template.h.hbs"/>
+        <!-- License files -->
+        <file category="genAsset" name=".config/template/partials/LICENSE_partial.hbs"/>
+        <file category="genAsset" name=".config/template/license/mx_usbpd_license_template.md.hbs"/>
+      </files>
+    </component>
+    <!-- mx_usbpd_vdm_user_app -->
+    <component generator="usbpd_mx2codegen" Cclass="USB" Cgroup="STM32CubeMX2 Codegen" Csub="vdm_user_app" Cversion="2.0.0" condition="Use vdm user app">
+      <description>USBPD vdm user app.</description>
+      <files>
+        <file category="genAsset" name=".config/template/mx_usbpd_vdm_user_app_template.c.hbs"/>
+        <file category="genAsset" name=".config/template/mx_usbpd_vdm_user_app_template.h.hbs"/>
+        <!-- License files -->
+        <file category="genAsset" name=".config/template/partials/LICENSE_partial.hbs"/>
+        <file category="genAsset" name=".config/template/license/mx_usbpd_license_template.md.hbs"/>
+      </files>
+    </component>
+    <!-- usbpd_pdo_defs -->
+    <component generator="usbpd_mx2codegen" Cclass="USB" Cgroup="STM32CubeMX2 Codegen" Csub="pdo_defs" Cversion="2.0.0" condition="usbpd lib condition">
+      <description>USBPD pdo definition.</description>
+      <files>
+        <file category="genAsset" name=".config/template/usbpd_pdo_defs_template.c.hbs"/>
+        <!-- License files -->
+        <file category="genAsset" name=".config/template/partials/LICENSE_partial.hbs"/>
+        <file category="genAsset" name=".config/template/license/mx_usbpd_license_template.md.hbs"/>
+      </files>
+    </component>
+    <!-- STM32 USBPD MX2CodeGen -->
+    <component generator="usbpd_mx2codegen" Cclass="USB" Cgroup="STM32CubeMX2 Config" Csub="USBPD" Cversion="0.1.0" condition="usbpd core condition">
+      <description>Temporary component that will store all the resulting generated code and initialize code generation for USBPD MW</description>
+      <environments>
+        <environment name="STM32Cube">
+          <stm32:component>
+            <middleware-entry-point id="USBPD" name="USBPD" category="USB"/>
+          </stm32:component>
+        </environment>
+      </environments>
+      <files>
+        <file category="genAsset" name=".config/gen_code.bat"/>
+        <file category="genAsset" name=".config/gen_code.sh"/>
+        <file category="genAsset" name=".config/STMicroelectronics.usbpd.gpdsc.hbs"/>
+        <file category="genAsset" name=".config/usbpd_config_parameters.json"/>
+        <!-- usbpd_config -->
+        <file category="genAsset" name=".config/template/usbpd_config_template.h.hbs"/>
+        <!-- mx_usbpd_dpm_user_app -->
+        <file category="genAsset" name=".config/template/mx_usbpd_dpm_user_app_template.c.hbs"/>
+        <file category="genAsset" name=".config/template/mx_usbpd_dpm_user_app_template.h.hbs"/>
+        <!-- mx_usbpd_app -->
+        <file category="genAsset" name=".config/template/mx_usbpd_app_template.c.hbs"/>
+        <file category="genAsset" name=".config/template/mx_usbpd_app_template.h.hbs"/>
+        <!-- License files -->
+        <file category="genAsset" name=".config/template/partials/LICENSE_partial.hbs"/>
+        <file category="genAsset" name=".config/template/license/mx_usbpd_license_template.md.hbs"/>
+      </files>
+    </component>
+  </components>
+</package>

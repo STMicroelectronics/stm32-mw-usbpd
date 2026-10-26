@@ -1,0 +1,166 @@
+/**
+  ******************************************************************************
+  * @file    mx_usbpd_usb_if.c
+  * @brief   USB interface module.
+  *          This file provides a set of functions to manage the USB middleware
+  *          notifications related to USBPD.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025-2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_usbpd_license.md file
+  * in the root directory of this software component.
+  * If no mx_usbpd_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
+/* Includes ------------------------------------------------------------------*/
+#include "mx_usbpd_usb_if.h"
+
+/** @addtogroup STM32_USBPD_LIBRARY
+  * @{
+  */
+
+/** @addtogroup USBPD_USB_IF
+  * @{
+  * @note This file contains all the USBPD API for USB data management.
+          The API call is managed through the notification function (USBPD_DPM_Notification).
+  */
+
+/* Private types -----------------------------------------------------------*/
+/** @defgroup USBPD_USB_IF_Private_Types USBPD_USB_IF Private Types
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private constants ---------------------------------------------------------*/
+/** @defgroup USBPD_USB_IF_Private_Constants USBPD_USB_IF Private Constants
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private macros -------------------------------------------------------------*/
+/** @defgroup USBPD_USB_IF_Private_Macros USBPD_USB_IF Private Macros
+  * @{
+  */
+
+
+/**
+  * @}
+  */
+
+/* Private functions ---------------------------------------------------------*/
+/** @defgroup USBPD_USB_IF_Private_Functions USBPD_USB_IF Private Functions
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private variables ---------------------------------------------------------*/
+/** @defgroup USBPD_USB_IF_Private_Variables USBPD_USB_IF Private Variables
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Exported functions --------------------------------------------------------*/
+/** @addtogroup USBPD_USB_IF_Exported_Functions
+  * @{
+  */
+
+/**
+  * @brief  Start DFP.
+  * @param  PortNum Port number.
+  */
+void USBPD_USBIF_Start_DFP(uint8_t port_num)
+{
+  USBPD_TRACE_INFO_PRINTF(port_num, "%s", __func__);
+}
+
+/**
+  * @brief  Start UFP.
+  * @param  PortNum Port number.
+  */
+void USBPD_USBIF_Start_UFP(uint8_t port_num)
+{
+  USBPD_TRACE_INFO_PRINTF(port_num, "%s", __func__);
+}
+
+/**
+  * @brief  Stop DFP.
+  * @param  PortNum Port number.
+  */
+void USBPD_USBIF_Stop_DFP(uint8_t port_num)
+{
+  USBPD_TRACE_INFO_PRINTF(port_num, "%s", __func__);
+}
+
+/**
+  * @brief  Stop UFP.
+  * @param  PortNum Port number.
+  */
+void USBPD_USBIF_Stop_UFP(uint8_t port_num)
+{
+  USBPD_TRACE_INFO_PRINTF(port_num, "%s", __func__);
+}
+
+/**
+  * @brief  Swap DFP.
+  * @param  PortNum Port number.
+  */
+void USBPD_USBIF_Swap_DFP(uint8_t port_num)
+{
+  USBPD_TRACE_INFO_PRINTF(port_num, "%s", __func__);
+}
+
+/**
+  * @brief  Swap UFP.
+  * @param  PortNum Port number.
+  */
+void USBPD_USBIF_Swap_UFP(uint8_t port_num)
+{
+  USBPD_TRACE_INFO_PRINTF(port_num, "%s", __func__);
+}
+
+/**
+  * @brief  TAME Timeout.
+  * @param  PortNum Port number.
+  */
+void USBPD_USBIF_TAME_Timeout(uint8_t port_num)
+{
+  USBPD_TRACE_INFO_PRINTF(port_num, "%s", __func__);
+}
+
+/**
+  * @brief  TAME Stop.
+  * @param  PortNum Port number.
+  */
+void USBPD_USBIF_TAME_Stop(uint8_t port_num)
+{
+  USBPD_TRACE_INFO_PRINTF(port_num, "%s", __func__);
+}
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */

@@ -1,0 +1,549 @@
+{{assign "usbpdFilter" (JSONparse '{"cgroup": "STM32CubeMX2 Config", "csub": "USBPD"}')~}}
+{{assign 'usbpd_context' (@root.SWConfigurationAPI.getInstancesConfiguration @root.usbpdFilter)~}}
+{{assign 'usbpd_cxt' @root.usbpd_context.[0].settings.parameters~}}
+/**
+  ******************************************************************************
+  * @file    mx_usbpd_vdm_user_app.c
+  * @brief   VDM user module.
+  *          This file provides a set of functions to manage Vendor
+  *          Defined Messages.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025-2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_usbpd_license.md file
+  * in the root directory of this software component.
+  * If no mx_usbpd_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
+/* Includes ------------------------------------------------------------------*/
+#include "mx_usbpd_vdm_user_app.h"
+
+/** @addtogroup STM32_USBPD_LIBRARY
+  * @{
+  */
+
+/** @addtogroup USBPD_VDM_USER
+  * @{
+  */
+
+/* Private types -----------------------------------------------------------*/
+/** @defgroup USBPD_VDM_USER_Private_Types USBPD_VDM_USER Private Types
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private constants ---------------------------------------------------------*/
+/** @defgroup USBPD_VDM_USER_Private_Constants USBPD_VDM_USER Private Constants
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private macros -------------------------------------------------------------*/
+/** @defgroup USBPD_VDM_USER_Private_Macros USBPD_VDM_USER Private Macros
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private functions ---------------------------------------------------------*/
+/** @defgroup USBPD_VDM_USER_Private_Functions USBPD_VDM_USER Private Functions
+  * @{
+  */
+
+static usbpd_status_t USBPD_VDM_DiscoverIdentity(uint8_t port_num, usbpd_vdm_discovery_identity_t *p_identity);
+static usbpd_status_t USBPD_VDM_DiscoverSVIDs(uint8_t port_num, uint16_t **p_SVID_Info, uint8_t *nb);
+static usbpd_status_t USBPD_VDM_DiscoverModes(uint8_t port_num, uint16_t svid, uint32_t **p_ModeInfo, uint8_t *nbMode);
+static usbpd_status_t USBPD_VDM_ModeEnter(uint8_t port_num, uint16_t svid, uint32_t mode_index);
+static usbpd_status_t USBPD_VDM_ModeExit(uint8_t port_num, uint16_t svid, uint32_t mode_index);
+static void USBPD_VDM_SendAttention(uint8_t port_num, uint8_t *data_count, uint32_t *VDO);
+static void USBPD_VDM_ReceiveAttention(uint8_t port_num, uint8_t data_count, uint32_t VDO);
+static usbpd_status_t USBPD_VDM_ReceiveSpecific(uint8_t port_num, usbpd_vdm_svdm_command_t vdm_command,
+                                                uint8_t *data_count, uint32_t *VDO);
+static void USBPD_VDM_InformIdentity(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                     usbpd_vdm_user_command_type_t command_status,
+                                     usbpd_vdm_discovery_identity_t *p_identity);
+static void USBPD_VDM_InformSVID(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                 usbpd_vdm_user_command_type_t command_status, usbpd_vdm_svid_info_t *p_list_svid);
+static void USBPD_VDM_InformMode(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                 usbpd_vdm_user_command_type_t command_status, usbpd_vdm_mode_info_t *pModesInfo);
+static void USBPD_VDM_InformModeEnter(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                      usbpd_vdm_user_command_type_t command_status, uint16_t svid, uint32_t mode_index);
+static void USBPD_VDM_InformModeExit(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                     usbpd_vdm_user_command_type_t command_status, uint16_t svid, uint32_t mode_index);
+static void USBPD_VDM_InformSpecific(uint8_t port_num, usbpd_sop_type_t sop_type, usbpd_vdm_svdm_command_t vdm_command,
+                                     uint8_t *data_count, uint32_t *VDO);
+static void USBPD_VDM_SendSpecific(uint8_t port_num, usbpd_sop_type_t sop_type, usbpd_vdm_svdm_command_t vdm_command,
+                                   uint8_t *data_count, uint32_t *VDO);
+static void USBPD_VDM_SendUVDM(uint8_t port_num, usbpd_vdm_uvdm_header_t *puvdm_header, uint8_t *pdata_count,
+                               uint32_t *p_vdo);
+static usbpd_status_t USBPD_VDM_ReceiveUVDM(uint8_t port_num, usbpd_vdm_uvdm_header_t uvdm_header, uint8_t *pdata_count,
+                                            uint32_t *p_vdo);
+
+/**
+  * @}
+  */
+
+/* Private variables ---------------------------------------------------------*/
+/** @defgroup USBPD_VDM_USER_Private_Variables USBPD_VDM_USER Private Variables
+  * @{
+  */
+
+/**
+  * @brief  VDM settings.
+  */
+usbpd_vdm_settings_t dpm_vdm_settings[USBPD_PORT_COUNT] =
+{
+  {
+    /* A decimal number assigned by USB-IF before certification */
+    .vdm_xid_sop             = USBPD_XID,
+    /* A decimal number assigned by USB-IF before certification */
+    .vdm_usb_vid_sop         = USBPD_VID,
+    /* A unique number assigned by the Vendor ID holder identifying the product. */
+    .vdm_pid_sop             = USBPD_PID,
+    /* Product support modes based on @ref usbpd_vdm_modal_op_support_t */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.vdm.modal_operation}}
+    .vdm_modal_operation     = USBPD_VDM_MODAL_OPERATION_SUPPORTED,
+{{else}}
+    .vdm_modal_operation     = USBPD_VDM_MODAL_OPERATION_NOT_SUPPORTED,
+{{/if}}
+    /* A unique number assigned by the Vendor ID holder containing identity information
+       relevant to the release version of the product. */
+    .vdm_bcd_device_sop      = {{usbpd_cxt.interfaces.port.[0].applicative.vdm.bcd_device_sop}},
+    /* Indicates whether the UUT is capable of enumerating USB Host */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.vdm.usb_host_support}}
+    .vdm_usb_host_support    = USBPD_VDM_USB_CAPA_CAPABLE,
+{{else}}
+    .vdm_usb_host_support    = USBPD_VDM_USB_CAPA_NOTCAPABLE,
+{{/if}}
+    /* Indicates whether the UUT is capable of enumerating USB Devices */
+{{#if usbpd_cxt.interfaces.port.[0].applicative.vdm.usb_device_support}}
+    .vdm_usb_device_support  = USBPD_VDM_USB_CAPA_CAPABLE,
+{{else}}
+    .vdm_usb_device_support  = USBPD_VDM_USB_CAPA_NOTCAPABLE,
+{{/if}}
+    /* Product type UFP or CablePlug of the UUT based on @ref usbpd_vdm_product_type_t */
+    .vdm_product_type_ufp_cp = USBPD_VDM_PRODUCT_TYPE_{{usbpd_cxt.interfaces.port.[0].applicative.vdm.product_type}},
+{{#if (gt usbpd_cxt.interfaces.port.length 1)}}
+  },
+  {
+    /* A decimal number assigned by USB-IF before certification */
+    .vdm_xid_sop             = USBPD_XID,
+    /* A decimal number assigned by USB-IF before certification */
+    .vdm_usb_vid_sop         = USBPD_VID,
+    /* A unique number assigned by the Vendor ID holder identifying the product. */
+    .vdm_pid_sop             = USBPD_PID,
+    /* Product support modes based on @ref usbpd_vdm_modal_op_support_t */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.vdm.modal_operation}}
+    .vdm_modal_operation     = USBPD_VDM_MODAL_OPERATION_SUPPORTED,
+{{else}}
+    .vdm_modal_operation     = USBPD_VDM_MODAL_OPERATION_NOT_SUPPORTED,
+{{/if}}
+    /* A unique number assigned by the Vendor ID holder containing identity information
+       relevant to the release version of the product. */
+    .vdm_bcd_device_sop      = {{usbpd_cxt.interfaces.port.[1].applicative.vdm.bcd_device_sop}},
+    /* Indicates whether the UUT is capable of enumerating USB Host */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.vdm.usb_host_support}}
+    .vdm_usb_host_support    = USBPD_VDM_USB_CAPA_CAPABLE,
+{{else}}
+    .vdm_usb_host_support    = USBPD_VDM_USB_CAPA_NOTCAPABLE,
+{{/if}}
+    /* Indicates whether the UUT is capable of enumerating USB Devices */
+{{#if usbpd_cxt.interfaces.port.[1].applicative.vdm.usb_device_support}}
+    .vdm_usb_device_support  = USBPD_VDM_USB_CAPA_CAPABLE,
+{{else}}
+    .vdm_usb_device_support  = USBPD_VDM_USB_CAPA_NOTCAPABLE,
+{{/if}}
+    /* Product type UFP or CablePlug of the UUT based on @ref usbpd_vdm_product_type_t */
+    .vdm_product_type_ufp_cp = USBPD_VDM_PRODUCT_TYPE_{{usbpd_cxt.interfaces.port.[1].applicative.vdm.product_type}},
+{{/if}}
+  }
+};
+
+/**
+  * @brief  VDM callbacks.
+  */
+const usbpd_vdm_cb_t vdmCallbacks =
+{
+  USBPD_VDM_DiscoverIdentity,
+  USBPD_VDM_DiscoverSVIDs,
+  USBPD_VDM_DiscoverModes,
+  USBPD_VDM_ModeEnter,
+  USBPD_VDM_ModeExit,
+  USBPD_VDM_InformIdentity,
+  USBPD_VDM_InformSVID,
+  USBPD_VDM_InformMode,
+  USBPD_VDM_InformModeEnter,
+  USBPD_VDM_InformModeExit,
+  USBPD_VDM_SendAttention,
+  USBPD_VDM_ReceiveAttention,
+  USBPD_VDM_SendSpecific,
+  USBPD_VDM_ReceiveSpecific,
+  USBPD_VDM_InformSpecific,
+  USBPD_VDM_SendUVDM,
+  USBPD_VDM_ReceiveUVDM,
+};
+
+/**
+  * @}
+  */
+
+/* Exported functions --------------------------------------------------------*/
+/** @addtogroup USBPD_VDM_USER_Exported_Functions
+  * @{
+  */
+
+/**
+  * @brief  VDM Initialization.
+  * @param  port_num Current port number.
+  * @return USBPD status.
+  */
+usbpd_status_t USBPD_VDM_UserInit(uint8_t port_num)
+{
+  return USBPD_OK;
+}
+
+/**
+  * @brief  VDM Reset.
+  * @param  port_num Current port number.
+  * @retval status
+  */
+void USBPD_VDM_UserReset(uint8_t port_num)
+{
+  /* Nothing to do */
+}
+
+/**
+  * @}
+  */
+
+/* Private functions --------------------------------------------------------*/
+/** @addtogroup USBPD_VDM_USER_Private_Functions
+  * @{
+  */
+
+
+/**
+  * @brief  VDM Discovery identity callback.
+  * @note   Function is called to get Discovery identity information linked to the device and answer
+  *         to SVDM Discovery identity init message sent by port partner.
+  * @param  port_num Current port number.
+  * @param  p_identity Pointer on @ref usbpd_vdm_discovery_identity_t structure.
+  * @retval USBPD status: @ref USBPD_ACK or @ref USBPD_BUSY.
+  */
+static usbpd_status_t USBPD_VDM_DiscoverIdentity(uint8_t port_num, usbpd_vdm_discovery_identity_t *p_identity)
+{
+  return USBPD_NAK;
+}
+
+/**
+  * @brief  VDM Discover SVID callback.
+  * @note   Function is called to retrieve SVID supported by device and answer
+  *         to SVDM Discovery SVID init message sent by port partner.
+  * @param  port_num Current port number.
+  * @param  p_SVID_Info Pointer on @ref usbpd_vdm_svid_info_t structure.
+  * @param  p_svid_count Pointer on number of SVID.
+  * @retval USBPD status @ref USBPD_BUSY or @ref USBPD_ACK or @ref USBPD_NAK.
+  */
+static usbpd_status_t USBPD_VDM_DiscoverSVIDs(uint8_t port_num, uint16_t **p_SVID_Info, uint8_t *p_svid_count)
+{
+  return USBPD_NAK;
+}
+
+/**
+  * @brief  VDM Discover Mode callback (report all the modes supported by SVID).
+  * @note   Function is called to report all the modes supported by selected SVID and answer
+  *         to SVDM Discovery Mode init message sent by port partner.
+  * @param  port_num Current port number.
+  * @param  svid SVID value.
+  * @param  p_mode_tab Pointer on the mode value.
+  * @param  mode_count Number of mode available.
+  * @return USBPD status.
+  */
+static usbpd_status_t USBPD_VDM_DiscoverModes(uint8_t port_num, uint16_t svid, uint32_t **p_mode_tab,
+                                              uint8_t *mode_count)
+{
+  return USBPD_NAK;
+}
+
+/**
+  * @brief  VDM Mode enter callback.
+  * @note   Function is called to check if device can enter in the mode received for the selected SVID in the
+  *         SVDM enter mode init message sent by port partner.
+  * @param  port_num Current port number.
+  * @param  svid SVID value.
+  * @param  mode_index Index of the mode to be entered.
+  * @retval USBPD status @ref USBPD_ACK/@ref USBPD_NAK.
+  */
+static usbpd_status_t USBPD_VDM_ModeEnter(uint8_t port_num, uint16_t svid, uint32_t mode_index)
+{
+  return USBPD_NAK;
+}
+
+/**
+  * @brief  VDM Mode exit callback.
+  * @note   Function is called to check if device can exit from the mode received for the selected SVID in the
+  *         SVDM exit mode init message sent by port partner.
+  * @param  port_num Current port number.
+  * @param  svid SVID value.
+  * @param  mode_index Index of the mode to be exited.
+  * @retval USBPD status @ref USBPD_ACK/@ref USBPD_NAK.
+  */
+static usbpd_status_t USBPD_VDM_ModeExit(uint8_t port_num, uint16_t svid, uint32_t mode_index)
+{
+  return USBPD_NAK;
+}
+
+/**
+  * @brief  Send VDM Attention message callback.
+  * @note   Function is called when device wants to send a SVDM attention message to port partner
+  *         (for instance DP status can be filled through this function).
+  * @param  port_num Current port number.
+  * @param  pdata_count Pointer of number of VDO to send.
+  * @param  p_vdo Pointer of VDO to send.
+  */
+static void USBPD_VDM_SendAttention(uint8_t port_num, uint8_t *pdata_count, uint32_t *p_vdo)
+{
+
+}
+
+/**
+  * @brief  Receive VDM Attention callback.
+  * @note   Function is called when a SVDM attention init message has been received from port partner
+  *         (for instance, save DP status data through this function).
+  * @param  port_num Current port number.
+  * @param  data_count Number of received VDO.
+  * @param  VDO Received VDO.
+  */
+static void USBPD_VDM_ReceiveAttention(uint8_t port_num, uint8_t data_count, uint32_t VDO)
+{
+
+}
+
+/**
+  * @brief  VDM Receive Specific message callback.
+  * @note   Function is called to answer to a SVDM specific init message received by port partner.
+  *         (for instance, retrieve DP status or DP configure data through this function).
+  * @param  port_num Current port number.
+  * @param  vdm_command  VDM command.
+  * @param  pdata_count Pointer of number of received VDO and used for the answer.
+  * @param  p_vdo Pointer of received VDO and use for the answer.
+  * @retval USBPD Status
+  */
+static usbpd_status_t USBPD_VDM_ReceiveSpecific(uint8_t port_num, usbpd_vdm_svdm_command_t vdm_command,
+                                                uint8_t *pdata_count, uint32_t *p_vdo)
+{
+  return USBPD_NAK;
+}
+
+/**
+  * @brief  Inform identity callback.
+  * @note   Function is called to save Identity information received in Discovery identity from port partner
+            (answer to SVDM discovery identity sent by device).
+  * @param  port_num Current port number.
+  * @param  sop_type SOP type.
+  * @param  command_status Command status.
+  * @param  p_identity Pointer on the discovery identity information.
+  */
+static void USBPD_VDM_InformIdentity(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                     usbpd_vdm_user_command_type_t command_status,
+                                     usbpd_vdm_discovery_identity_t *p_identity)
+{
+  switch (command_status)
+  {
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_ACK :
+      break;
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_NAK :
+      break;
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_BUSY :
+      break;
+    default :
+      break;
+  }
+}
+
+/**
+  * @brief  Inform SVID callback.
+  * @note   Function is called to save list of SVID received in Discovery SVID from port partner
+            (answer to SVDM discovery SVID sent by device).
+  * @param  port_num Current port number.
+  * @param  sop_type SOP type.
+  * @param  command_status Command status.
+  * @param  p_list_svid Pointer of list of SVID.
+  */
+static void USBPD_VDM_InformSVID(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                 usbpd_vdm_user_command_type_t command_status, usbpd_vdm_svid_info_t *p_list_svid)
+{
+  switch (command_status)
+  {
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_ACK :
+      break;
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_NAK :
+      break;
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_BUSY :
+      break;
+    default :
+      break;
+  }
+}
+
+/**
+  * @brief  Inform Mode callback ( received in Discovery modes ACK).
+  * @note   Function is called to save list of modes linked to SVID received in Discovery mode from port partner
+            (answer to SVDM discovery mode sent by device).
+  * @param  port_num Current port number.
+  * @param  sop_type SOP type.
+  * @param  command_status Command status.
+  * @param  pModesInfo Pointer of modes info.
+  */
+static void USBPD_VDM_InformMode(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                 usbpd_vdm_user_command_type_t command_status, usbpd_vdm_mode_info_t *pModesInfo)
+{
+  switch (command_status)
+  {
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_ACK :
+      break;
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_NAK :
+      break;
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_BUSY :
+      break;
+    default :
+      break;
+  }
+}
+
+/**
+  * @brief  Inform Mode enter callback.
+  * @note   Function is called to inform if port partner accepted or not to enter in the mode
+  *         specified in the SVDM enter mode sent by the device.
+  * @param  port_num Current port number.
+  * @param  sop_type SOP type.
+  * @param  command_status Command status.
+  * @param  svid SVID ID.
+  * @param  mode_index Index of the mode to be entered.
+  */
+static void USBPD_VDM_InformModeEnter(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                      usbpd_vdm_user_command_type_t command_status, uint16_t svid, uint32_t mode_index)
+{
+  switch (command_status)
+  {
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_ACK :
+      break;
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_NAK :
+      break;
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_BUSY :
+      /* retry in 50ms */
+      break;
+    default :
+      break;
+  }
+}
+
+/**
+  * @brief  Inform Exit enter callback.
+  * @param  port_num Current port number.
+  * @param  svid SVID ID.
+  * @param  mode_index Index of the mode to be entered.
+  */
+static void USBPD_VDM_InformModeExit(uint8_t port_num, usbpd_sop_type_t sop_type,
+                                     usbpd_vdm_user_command_type_t command_status, uint16_t svid, uint32_t mode_index)
+{
+  switch (command_status)
+  {
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_ACK :
+      break;
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_NAK :
+      break;
+    case USBPD_VDM_COMMAND_TYPE_SVDM_RESPONDER_BUSY :
+      /* retry in 50ms */
+      break;
+    default :
+      break;
+  }
+}
+
+/**
+  * @brief  VDM Send Specific message callback.
+  * @note   Function is called when device wants to send a SVDM specific init message to port partner
+  *         (for instance DP status or DP configure can be filled through this function).
+  * @param  port_num Current port number.
+  * @param  sop_type SOP type.
+  * @param  vdm_command VDM command.
+  * @param  pdata_count Pointer of number of VDO to send.
+  * @param  p_vdo Pointer of VDO to send.
+  */
+static void USBPD_VDM_SendSpecific(uint8_t port_num, usbpd_sop_type_t sop_type, usbpd_vdm_svdm_command_t vdm_command,
+                                   uint8_t *pdata_count, uint32_t *p_vdo)
+{
+
+}
+
+/**
+  * @brief  VDM Specific message callback to inform user of reception of VDM specific message.
+  * @note   Function is called when answer from SVDM specific init message has been received by the device
+  *         (for instance, save DP status and DP configure data through this function).
+  * @param  port_num Current port number.
+  * @param  sop_type SOP type.
+  * @param  vdm_command VDM command.
+  * @param  pdata_count Pointer of number of received VDO.
+  * @param  p_vdo Pointer of received VDO..
+  */
+static void USBPD_VDM_InformSpecific(uint8_t port_num, usbpd_sop_type_t sop_type, usbpd_vdm_svdm_command_t vdm_command,
+                                     uint8_t *pdata_count, uint32_t *p_vdo)
+{
+
+}
+
+/**
+  * @brief  VDM Send Unstructured message callback.
+  * @note   Aim of this function is to fill the UVDM message which contains 1 VDM Header + 6 VDO
+  *         This callback will be called when user requests to send a UVDM message thanks
+  *         to USBPD_DPM_RequestUVDMMessage() function.
+  * @param  port_num Current port number.
+  * @param  puvdm_header Pointer on UVDM header.
+  * @param  pdata_count Pointer of number of VDO to send (max size must be equal to 6).
+  * @param  p_vdo Pointer of VDO to send (up to 6 x uint32_t).
+  */
+static void USBPD_VDM_SendUVDM(uint8_t port_num, usbpd_vdm_uvdm_header_t *puvdm_header, uint8_t *pdata_count,
+                               uint32_t *p_vdo)
+{
+
+}
+
+/**
+  * @brief  Unstructured VDM  message callback to inform user of reception of UVDM message.
+  * @param  port_num Current port number.
+  * @param  uvdm_header UVDM header.
+  * @param  pdata_count Pointer of number of received VDO.
+  * @param  p_vdo Pointer of received VDO.
+  * @return USBPD status.
+  */
+static usbpd_status_t USBPD_VDM_ReceiveUVDM(uint8_t port_num, usbpd_vdm_uvdm_header_t uvdm_header, uint8_t *pdata_count,
+                                            uint32_t *p_vdo)
+{
+  return USBPD_ERROR;
+}
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */

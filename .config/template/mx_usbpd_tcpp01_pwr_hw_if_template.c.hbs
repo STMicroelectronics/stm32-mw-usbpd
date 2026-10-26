@@ -1,0 +1,421 @@
+/**
+  ******************************************************************************
+  * @file    mx_usbpd_tcpp01_pwr_hw_if.c
+  * @brief   Power hardware interface module.
+  *          This file provides a set of functions to manage the power hardware
+  *          interface.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025-2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_usbpd_license.md file
+  * in the root directory of this software component.
+  * If no mx_usbpd_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
+#define USBPD_TRACE_VERBOSE_LEVEL     USBPD_TRACE_VERBOSE_LEVEL_INFO /*<! Trace verbosity level for this file. */
+
+/* Includes ------------------------------------------------------------------*/
+#include "usbpd_pwr.h"
+#include "mx_usbpd_tcpp01_pwr_hw_if.h"
+
+/** @addtogroup STM32_USBPD_LIBRARY
+  * @{
+  */
+
+/** @addtogroup USBPD_PWR_HW_IF
+  * @brief   This file contains PWR hardware interface functions.
+  * @{
+  */
+
+/* Private types -----------------------------------------------------------*/
+/** @defgroup USBPD_PWR_HW_IF_Private_Types USBPD_PWR_HW_IF Private Types
+  * @{
+  */
+
+/**
+  * @brief  PWR HW IF Handle definition.
+  */
+typedef struct
+{
+  tcpp01_obj_t                    *p_tcpp01_obj;    /*!< TCPP object                             */
+} pwr_hw_if_handle_t;
+
+/**
+  * @}
+  */
+
+/* Private constants ---------------------------------------------------------*/
+/** @defgroup USBPD_PWR_HW_IF_Private_Constants USBPD_PWR_HW_IF Private Constants
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private macros -------------------------------------------------------------*/
+/** @defgroup USBPD_PWR_HW_IF_Private_Macros USBPD_PWR_HW_IF Private Macros
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private functions ---------------------------------------------------------*/
+/** @defgroup USBPD_PWR_HW_IF_Private_Functions USBPD_PWR_HW_IF Private Functions
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/* Private variables ---------------------------------------------------------*/
+/** @defgroup USBPD_PWR_HW_IF_Private_Variables USBPD_PWR_HW_IF Private Variables
+  * @{
+  */
+
+/*< PWR HW IF Handle declaration */
+static pwr_hw_if_handle_t h_pwr_hw_if[USBPD_PORT_COUNT] =
+{
+  {NULL},
+};
+
+/**
+  * @}
+  */
+
+/* Exported functions --------------------------------------------------------*/
+/** @addtogroup USBPD_PWR_HW_IF_Exported_Functions
+  * @{
+  */
+
+/**
+  * @brief  Initialize the PWR hardware interface.
+  * @param  port_num Port number.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_Init(uint8_t port_num)
+{
+  usbpd_status_t ret = USBPD_OK;
+
+  USBPD_TRACE_INFO_PRINTF(port_num, "%s", __func__);
+
+{{#if (eq (@root.EnvVarAPI.getVariableValue 'UCPD_DBDIS') true)}}
+  /* Disable STM32 dead battery as it is handled by the TCPP */
+  HAL_PWR_LP_DisableUCPDDeadBattery();
+{{/if}}
+
+  if (HAL_ADC_Start(usbpd_adc_gethandle()) != HAL_OK)
+  {
+    return USBPD_ERROR;
+  }
+
+  if (HAL_ADC_Calibrate(usbpd_adc_gethandle()) != HAL_OK)
+  {
+    return USBPD_ERROR;
+  }
+
+  h_pwr_hw_if[port_num].p_tcpp01_obj = (port_num == USBPD_PORT_0) ? mx_tcpp01_0_getobject() :
+{{#if (gt usbpd_cxt.interfaces.port.length 1)}}
+#if (USBPD_PORT_COUNT > 1U)
+                                       mx_tcpp01_1_getobject();
+#else
+                                       NULL;
+#endif /* (USBPD_PORT_COUNT > 1U) */
+{{else}}
+                                       NULL;
+{{/if}}
+  if (tcpp01_init(h_pwr_hw_if[port_num].p_tcpp01_obj, port_num) != TCPP01_OK)
+  {
+    ret = USBPD_ERROR;
+  }
+
+  if (tcpp01_start(h_pwr_hw_if[port_num].p_tcpp01_obj) != TCPP01_OK)
+  {
+    ret = USBPD_ERROR;
+  }
+
+  return ret;
+}
+
+/**
+  * @brief  De-initialize the PWR hardware interface.
+  * @param  port_num Port number.
+  */
+void USBPD_PWR_HW_IF_DeInit(uint8_t port_num)
+{
+  (void)tcpp01_deinit(h_pwr_hw_if[port_num].p_tcpp01_obj);
+}
+
+/**
+  * @brief  Initialize the VBUS hardware interface.
+  * @param  port_num Port number.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VBUSInit(uint8_t port_num)
+{
+  return USBPD_OK;
+}
+
+/**
+  * @brief  De-initialize the VBUS hardware interface.
+  * @param  port_num Port number.
+  */
+void USBPD_PWR_HW_IF_VBUSDeInit(uint8_t port_num)
+{
+  return;
+}
+
+/**
+  * @brief  Enable VBUS on a specified port.
+  * @param  port_num Port number.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_EnableVBUS(uint8_t port_num)
+{
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Disable VBUS on a specified port.
+  * @param  port_num Port number.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_DisableVBUS(uint8_t port_num)
+{
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Check if VBUS is enabled on a specified port.
+  * @param  port_num Port number.
+  * @retval USBPD_ENABLE if VBUS is enabled.
+  * @retval USBPD_DISABLE if VBUS is disabled.
+  */
+usbpd_functional_status_t USBPD_PWR_HW_IF_IsEnabledVBUS(uint8_t port_num)
+{
+  return USBPD_DISABLE;
+}
+
+/**
+  * @brief  Initialize VConn hardware interface.
+  * @param  port_num Port number.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VConnInit(uint8_t port_num)
+{
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  De-initialize VConn hardware interface.
+  * @param  port_num Port number.
+  */
+void USBPD_PWR_HW_IF_VConnDeInit(uint8_t port_num)
+{
+  /* Not supported */
+}
+
+/**
+  * @brief  Enable VCONN on a specified port.
+  * @param  port_num Port number.
+  * @param  cc_pin The CC pin.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_EnableVConn(uint8_t port_num, usbpd_cc_line_t cc_pin)
+{
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Disable VCONN on a specified port.
+  * @param  port_num Port number.
+  * @param  cc_pin The CC pin.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_DisableVConn(uint8_t port_num, usbpd_cc_line_t cc_pin)
+{
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Check if VCONN is enabled on a specified port.
+  * @param  port_num Port number.
+  * @param  cc_pin The CC pin.
+  * @retval USBPD_ENABLE if VCONN is enabled.
+  * @retval USBPD_DISABLE if VCONN is disabled.
+  */
+usbpd_functional_status_t USBPD_PWR_HW_IF_IsEnabledVConn(uint8_t port_num, usbpd_cc_line_t cc_pin)
+{
+  return USBPD_DISABLE;
+}
+
+/**
+  * @brief  Get the voltage level on a specified port.
+  * @param  port_num Port number.
+  * @retval The voltage value in mV.
+  */
+uint32_t USBPD_PWR_HW_IF_VBUSGetVoltage(uint8_t port_num)
+{
+  uint32_t voltage = 0;
+
+  /* Check if instance is valid */
+  if (port_num >= (uint8_t)USBPD_PORT_COUNT)
+  {
+    return 0;
+  }
+  else
+  {
+    if (tcpp01_get_vbus_voltage(h_pwr_hw_if[port_num].p_tcpp01_obj, &voltage) != TCPP01_OK)
+    {
+      return 0;
+    }
+    else
+    {
+      return voltage;
+    }
+  }
+}
+
+/**
+  * @brief  Get the current level on a specified port.
+  * @param  port_num Port number.
+  * @retval The current value in mA.
+  */
+int16_t USBPD_PWR_HW_IF_VBUSGetCurrent(uint8_t port_num)
+{
+  return 0;
+}
+
+/**
+  * @brief  Set a fixed PDO and manage the power control.
+  * @param  port_num Port number.
+  * @param  vbus_target_mv The vbus Target (in mV).
+  * @param  operating_current_ma The Operating Current (in mA).
+  * @param  max_operating_current_ma The Max Operating Current (in mA).
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VBUSSetVoltage_Fixed(uint8_t port_num,
+                                                    uint32_t vbus_target_mv,
+                                                    uint32_t operating_current_ma,
+                                                    uint32_t max_operating_current_ma)
+{
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Set a variable PDO and manage the power control.
+  * @param  port_num Port number.
+  * @param  vbus_target_max_mv The vbus Target Max (in mV).
+  * @param  vbus_target_min_mv The vbus Target Min (in mV).
+  * @param  operating_current_ma The Operating Current (in mA).
+  * @param  max_operating_current_ma The Max Operating Current (in mA).
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VBUSSetVoltage_Variable(uint8_t port_num,
+                                                       uint32_t vbus_target_max_mv,
+                                                       uint32_t vbus_target_min_mv,
+                                                       uint32_t operating_current_ma,
+                                                       uint32_t max_operating_current_ma)
+{
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Set a battery PDO and manage the power control.
+  * @param  port_num Port number.
+  * @param  vbus_target_min_mv The vbus Target Min (in mV).
+  * @param  vbus_target_max_mv The vbus Target Max (in mV).
+  * @param  operating_power_mw The Operating Power (in mW).
+  * @param  max_operating_power_mw The Max Operating Power (in mW).
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VBUSSetVoltage_Battery(uint8_t port_num,
+                                                      uint32_t vbus_target_min_mv,
+                                                      uint32_t vbus_target_max_mv,
+                                                      uint32_t operating_power_mw,
+                                                      uint32_t max_operating_power_mw)
+{
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Set a APDO and manage the power control.
+  * @param  port_num Port number.
+  * @param  vbus_target_mv The vbus Target (in mV).
+  * @param  operating_current_ma The Operating Current (in mA).
+  * @param  delta_mv The Delta voltage (in mV).
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_VBUSSetVoltage_APDO(uint8_t port_num,
+                                                   uint32_t vbus_target_mv,
+                                                   uint32_t operating_current_ma,
+                                                   int32_t  delta_mv)
+{
+  return USBPD_NOTSUPPORTED;
+}
+
+/**
+  * @brief  Assign Power role of Port.
+  * @param  port_num Port number.
+  * @param  Role Type-C port role of type @ref usbpd_pwr_hw_if_role_t.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_SetRole(uint8_t port_num, usbpd_pwr_hw_if_role_t pwr_role)
+{
+  return USBPD_OK;
+}
+
+/**
+  * @brief  Set operating mode of Port.
+  * @param  port_num Port number.
+  * @param  pwr_mode Type-C port power saving mode of type @ref usbpd_pwr_hw_if_mode_t.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_SetPowerMode(uint8_t port_num, usbpd_pwr_hw_if_mode_t pwr_mode)
+{
+  return USBPD_OK;
+}
+
+/**
+  * @brief  Register USB Type-C Current callback function.
+  * @param  port_num Port number.
+  * @param  pCallback Callback function pointer of type @ref usbpd_pwr_vbusdetect_cb_t.
+  * @note   Callback function invoked when VBUS rises above 4V (VBUS present) or
+  *         when VBUS falls below programmed threshold (VBUS absent).
+  * @note   Callback function is un-registered when callback function pointer
+  *         argument is NULL.
+  * @return USBPD status of type @ref usbpd_status_t.
+  */
+usbpd_status_t USBPD_PWR_HW_IF_RegisterVBUSDetectCallback(uint8_t port_num,
+                                                          const usbpd_pwr_vbusdetect_cb_t pCallback)
+{
+  return USBPD_OK;
+}
+
+/**
+  * @}
+  */
+
+/** @addtogroup USBPD_PWR_HW_IF_Private_Functions USBPD_PWR_HW_IF Private Functions
+  * @{
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
